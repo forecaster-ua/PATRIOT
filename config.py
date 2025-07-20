@@ -108,13 +108,13 @@ if not BINANCE_API_KEY or not BINANCE_API_SECRET:
     print(f"Required environment variables: BINANCE_{missing_env}_API_KEY, BINANCE_{missing_env}_API_SECRET")
 
 # Настройки торговли фьючерсами
-CAPITAL_PERCENTAGE = float(os.getenv("CAPITAL_PERCENTAGE", "0.05"))  # 5% от капитала по умолчанию
+RISK_PERCENT = float(os.getenv("RISK_PERCENT", "2.0"))  # Процент от капитала на сделку (по умолчанию 2%)
+FUTURES_LEVERAGE = int(os.getenv("FUTURES_LEVERAGE", "30"))  # Плечо для фьючерсов (по умолчанию 30x)
+FUTURES_MARGIN_TYPE = os.getenv("FUTURES_MARGIN_TYPE", "CROSS")  # Режим маржи: CROSS или ISOLATED (по умолчанию CROSS)
 PRICE_TOLERANCE_PERCENT = float(os.getenv("PRICE_TOLERANCE_PERCENT", "1.0"))  # 1% допустимое отклонение цены
-FUTURES_LEVERAGE = int(os.getenv("FUTURES_LEVERAGE", "20"))  # Плечо для фьючерсов (по умолчанию 20x)
 
-# Настройки фьючерсных ордеров
-FUTURES_ORDER_TYPE = os.getenv("FUTURES_ORDER_TYPE", "LIMIT")  # Тип ордера: MARKET, LIMIT
-FUTURES_POSITION_SIDE = os.getenv("FUTURES_POSITION_SIDE", "BOTH")  # BOTH, LONG, SHORT для hedge mode
+# 🔧 Настройки управления позициями
+MULTIPLE_ORDERS = os.getenv("MULTIPLE_ORDERS", "false").lower() == "true"  # Разрешить несколько ордеров на один тикер
 
 # --- Telegram Configuration ---
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_TOKEN", "7948515996:AAHg9Tnvex3xyRc0rjnMscYTbHM1EUU5-d4")

@@ -41,6 +41,44 @@ class TelegramBot:
             logger.info(f"Sent Telegram alert: {signal.get('pair', signal.get('ticker', 'N/A'))} {signal.get('timeframe', 'N/A')}")
         else:
             logger.warning(f"Failed to send: {signal.get('pair', signal.get('ticker', 'N/A'))}")
+    
+    def send_error(self, error_message: str, signal_data: Dict) -> None:
+        """🚨 НОВЫЙ МЕТОД: Отправка уведомления об ошибке"""
+        message = f"""🚨 *ОШИБКА ОРДЕРА* 🚨
+
+📊 *Символ:* {signal_data.get('ticker', 'N/A')}
+🎯 *Сигнал:* {signal_data.get('signal', 'N/A')}
+💰 *Цена входа:* {signal_data.get('entry_price', 'N/A')}
+
+❌ *Ошибка:* {error_message}
+
+⏰ *Время:* {signal_data.get('timestamp', 'N/A')}"""
+        
+        payload = {
+            "chat_id": TELEGRAM_CHAT_ID,
+            "text": message,
+            "parse_mode": "Markdown",
+            "disable_notification": False
+        }
+        
+        if self._send_request(payload):
+            logger.info(f"✅ Уведомление об ошибке отправлено в Telegram")
+        else:
+            logger.error(f"❌ Не удалось отправить ошибку в Telegram")
+
+    def send_message(self, message: str, parse_mode: str = "HTML") -> None:
+        """Универсальный метод отправки сообщений"""
+        payload = {
+            "chat_id": TELEGRAM_CHAT_ID,
+            "text": message,
+            "parse_mode": parse_mode,
+            "disable_notification": False
+        }
+        
+        if self._send_request(payload):
+            logger.info("✅ Сообщение отправлено в Telegram")
+        else:
+            logger.error("❌ Не удалось отправить сообщение в Telegram")
 
     @staticmethod
     def _format_message(signal: Dict) -> str:

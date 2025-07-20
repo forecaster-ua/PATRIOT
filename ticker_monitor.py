@@ -34,8 +34,8 @@ import logging
 
 # Сначала пытаемся импортировать logger из utils
 try:
-    from ARCHIVE.signal_analyzer_overtuned import SignalAnalyzer
-    from order_generator import process_trading_signal
+    from signal_analyzer import SignalAnalyzer
+    from order_executor import execute_trading_signal
     from utils import logger
     from config import TIMEFRAMES
     logger.info("✅ Successfully imported project modules")
@@ -74,6 +74,7 @@ except ImportError as e:
         logger.info(f"📱 MOCK: Processing signal for {signal_data['ticker']}")
         return True
     
+    execute_trading_signal = process_trading_signal
     SignalAnalyzer = MockSignalAnalyzer
     TIMEFRAMES = ['1H', '4H', '1D']
 
@@ -341,8 +342,8 @@ class TickerMonitor:
                         logger.info(f"🎯 SIGNAL FOUND: {ticker} - {signal_data.get('signal', 'UNKNOWN')}")
                         self.stats.update(signals=1)
                         
-                        # Передаем в OrderGenerator для создания ордера/уведомления
-                        if process_trading_signal(signal_data):
+                        # Передаем в OrderExecutor для создания ордера
+                        if execute_trading_signal(signal_data):
                             self.stats.update(orders=1)
                             logger.info(f"✅ ORDER CREATED: {ticker}")
                         else:

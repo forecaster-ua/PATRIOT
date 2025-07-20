@@ -34,7 +34,8 @@ import config
 from symbol_cache import get_symbol_cache, round_price_for_symbol, round_quantity_for_symbol, validate_order_for_symbol
 
 # Константы для управления рисками
-DEFAULT_RISK_PERCENT = 10.0  # Унифицированный процент риска по умолчанию (10%)
+DEFAULT_RISK_PERCENT = 2.0  # Унифицированный процент риска по умолчанию (2%)
+DEFAULT_LEVERAGE = config.FUTURES_LEVERAGE  # Используем плечо из config.py
 
 class AdvancedSignalProcessor:
     """
@@ -122,8 +123,8 @@ class AdvancedSignalProcessor:
             return 1
         
         try:
-            # Устанавливаем плечо 50x
-            result = self.binance_client.futures_change_leverage(symbol=self.ticker, leverage=50)
+            # Устанавливаем плечо 30x
+            result = self.binance_client.futures_change_leverage(symbol=self.ticker, leverage=30)
             
             # Проверяем результат
             if isinstance(result, dict) and 'leverage' in result:
@@ -138,6 +139,59 @@ class AdvancedSignalProcessor:
         except Exception as e:
             logger.warning(f"⚠️ Не удалось установить плечо: {e}")
             return 1
+    
+    def get_current_price(self) -> float:
+        """Получает текущую рыночную цену символа"""
+        if not self.binance_client:
+            return 0.0
+        
+        try:
+            ticker_data = self.binance_client.get_symbol_ticker(symbol=self.ticker)
+            return float(ticker_data['price'])
+        except Exception as e:
+            logger.error(f"❌ Ошибка получения цены для {self.ticker}: {e}")
+            return 0.0
+    
+    def validate_limit_order_price(self, signal_data: Dict) -> tuple[bool, str]:
+        """
+        🚨 НОВАЯ ФУНКЦИЯ: Проверяет корректность цены лимитного ордера
+        
+        Правила валидации:
+        - LONG: entry_price ДОЛЖНА быть НИЖЕ current_price (покупаем дешевле)
+        - SHORT: entry_price ДОЛЖНА быть ВЫШЕ current_price (продаем дороже)
+        
+        Returns:
+            (bool, str): (valid, error_message)
+        """
+        try:
+            # Получаем текущую рыночную цену
+            current_price = self.get_current_price()
+            if current_price <= 0:
+                return False, "❌ Не удалось получить текущую цену"
+            
+            entry_price = float(signal_data['entry_price'])
+            signal_type = signal_data['signal']
+            
+            # Валидация логики цен
+            if signal_type == 'LONG' and entry_price > current_price:
+                error_msg = f"❌ LONG: ЦЕНА {entry_price:.6f} выше ТЕКУЩЕЙ ЦЕНЫ {current_price:.6f}"
+                return False, error_msg
+            elif signal_type == 'SHORT' and entry_price < current_price:
+                error_msg = f"❌ SHORT: ЦЕНА {entry_price:.6f} ниже ТЕКУЩЕЙ ЦЕНЫ {current_price:.6f}"
+                return False, error_msg
+            
+            # Дополнительная проверка: слишком далеко от текущей цены (>5%)
+            price_diff_percent = abs(entry_price - current_price) / current_price * 100
+            if price_diff_percent > 5.0:
+                warning_msg = f"⚠️ Цена входа на {price_diff_percent:.1f}% от текущей цены"
+                logger.warning(warning_msg)
+            
+            logger.info(f"✅ Цена валидна: {signal_type} @ {entry_price:.6f} (текущая: {current_price:.6f})")
+            return True, ""
+            
+        except Exception as e:
+            error_msg = f"❌ Ошибка валидации цены: {e}"
+            return False, error_msg
     
     def calculate_position_size(self, entry_price: float) -> tuple:
         """Рассчитывает размер позиции с учетом плеча"""
@@ -235,6 +289,19 @@ class AdvancedSignalProcessor:
             return {'success': False, 'error': 'Binance client not initialized'}
         
         try:
+            # 🚨 НОВАЯ ВАЛИДАЦИЯ: Проверяем корректность цены лимитного ордера
+            valid, error_msg = self.validate_limit_order_price(signal_data)
+            if not valid:
+                logger.error(f"🚫 Валидация не пройдена: {error_msg}")
+                # Отправляем ошибку в Telegram
+                try:
+                    signal_data_with_timestamp = signal_data.copy()
+                    signal_data_with_timestamp['timestamp'] = datetime.now().strftime('%H:%M:%S')
+                    telegram_bot.send_error(error_msg, signal_data_with_timestamp)
+                except Exception as tg_error:
+                    logger.error(f"❌ Не удалось отправить ошибку в Telegram: {tg_error}")
+                return {'success': False, 'error': error_msg}
+            
             side = Client.SIDE_BUY if signal_data['signal'] == 'LONG' else Client.SIDE_SELL
             entry_price = round_price_for_symbol(self.ticker, float(signal_data['entry_price']))
             stop_loss = round_price_for_symbol(self.ticker, float(signal_data.get('stop_loss', 0)))
