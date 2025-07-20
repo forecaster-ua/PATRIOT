@@ -147,6 +147,10 @@ class OrderMonitor:
     def _check_all_orders(self) -> None:
         """Проверяет статусы всех отслеживаемых ордеров"""
         try:
+            if not self.binance_client:
+                logger.error("❌ Binance client не инициализирован")
+                return
+                
             # Группируем ордера по символам для оптимизации API запросов
             symbols_to_check = set()
             for group in self.active_order_groups.values():
@@ -157,6 +161,12 @@ class OrderMonitor:
                 try:
                     # Получаем все открытые ордера по символу
                     open_orders = self.binance_client.futures_get_open_orders(symbol=symbol)
+                    
+                    # Преобразуем в список если получили словарь
+                    if isinstance(open_orders, dict):
+                        open_orders = [open_orders]
+                    elif open_orders is None:
+                        open_orders = []
                     
                     # Проверяем наши отслеживаемые ордера
                     self._process_symbol_orders(symbol, open_orders)
@@ -193,6 +203,10 @@ class OrderMonitor:
             if order_id not in open_order_ids:
                 # Получаем историю ордера для определения статуса
                 try:
+                    if not self.binance_client:
+                        logger.error("❌ Binance client не инициализирован")
+                        return
+                    
                     order_info = self.binance_client.futures_get_order(
                         symbol=group['ticker'],
                         orderId=order_id

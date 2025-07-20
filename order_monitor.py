@@ -150,6 +150,11 @@ class OrderMonitor:
     def _check_all_orders(self) -> None:
         """Проверяет статусы всех отслеживаемых ордеров"""
         try:
+            # Проверяем что клиент инициализирован
+            if not self.binance_client:
+                logger.warning("⚠️ Binance client не инициализирован, пропускаем проверку ордеров")
+                return
+            
             # Группируем ордера по символам для оптимизации API запросов
             symbols_to_check = set()
             for group in self.active_order_groups.values():
@@ -161,8 +166,12 @@ class OrderMonitor:
                     # Получаем все открытые ордера по символу
                     open_orders = self.binance_client.futures_get_open_orders(symbol=symbol)
                     
-                    # Проверяем наши отслеживаемые ордера
-                    self._process_symbol_orders(symbol, open_orders)
+                    # Проверяем что получили список, а не словарь с ошибкой
+                    if isinstance(open_orders, list):
+                        # Проверяем наши отслеживаемые ордера
+                        self._process_symbol_orders(symbol, open_orders)
+                    else:
+                        logger.warning(f"⚠️ Получен некорректный формат данных для ордеров {symbol}: {type(open_orders)}")
                     
                 except Exception as e:
                     logger.error(f"❌ Ошибка проверки ордеров {symbol}: {e}")
@@ -196,6 +205,11 @@ class OrderMonitor:
             if order_id not in open_order_ids:
                 # Получаем историю ордера для определения статуса
                 try:
+                    # Проверяем что клиент инициализирован
+                    if not self.binance_client:
+                        logger.warning("⚠️ Binance client не инициализирован, пропускаем проверку ордера")
+                        return
+                    
                     order_info = self.binance_client.futures_get_order(
                         symbol=group['ticker'],
                         orderId=order_id
