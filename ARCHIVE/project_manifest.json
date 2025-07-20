@@ -1,0 +1,542 @@
+{
+  "project": {
+    "name": "PATRIOT",
+    "description": "Сервис автоматической торговли на основе сигналов CryptoMaxa."
+  },
+  "external_dependencies": [],
+  "files": {
+    "api_client.py": {
+      "protected": true,
+      "description": "",
+      "type": "module",
+      "definitions": [
+        {
+          "type": "function",
+          "name": "is_500_error",
+          "signature": "def is_500_error(e)",
+          "doc": "Check if exception is a 500 error"
+        },
+        {
+          "type": "class",
+          "name": "APIClient",
+          "signature": "class APIClient()",
+          "doc": "Handles all API communications with signal provider",
+          "methods": [
+            {
+              "name": "__init__",
+              "signature": "def __init__(self)",
+              "doc": ""
+            },
+            {
+              "name": "_check_circuit_breaker",
+              "signature": "def _check_circuit_breaker(self)",
+              "doc": "Returns True if requests should be blocked"
+            },
+            {
+              "name": "_trip_circuit_breaker",
+              "signature": "def _trip_circuit_breaker(self)",
+              "doc": "Activate the circuit breaker"
+            },
+            {
+              "name": "get_signal",
+              "signature": "def get_signal(self, pair, timeframe, timeout)",
+              "doc": "Fetch trading signal for specified pair and timeframe\nwith comprehensive error handling and logging."
+            },
+            {
+              "name": "_log_error",
+              "signature": "def _log_error(self, response, pair, timeframe, elapsed)",
+              "doc": "Log API error responses"
+            }
+          ]
+        }
+      ],
+      "dependencies": [
+        "utils"
+      ]
+    },
+    "config.py": {
+      "protected": true,
+      "description": "",
+      "type": "module",
+      "definitions": [],
+      "dependencies": []
+    },
+    "database.py": {
+      "protected": true,
+      "description": "",
+      "type": "module",
+      "definitions": [
+        {
+          "type": "class",
+          "name": "SignalDatabase",
+          "signature": "class SignalDatabase()",
+          "doc": "Handles all database operations for trading signals",
+          "methods": [
+            {
+              "name": "__init__",
+              "signature": "def __init__(self, db_path)",
+              "doc": ""
+            },
+            {
+              "name": "_init_db",
+              "signature": "def _init_db(self)",
+              "doc": "Initialize database schema"
+            },
+            {
+              "name": "_get_connection",
+              "signature": "def _get_connection(self)",
+              "doc": "Create thread-safe database connection"
+            },
+            {
+              "name": "save_signal",
+              "signature": "def save_signal(self, signal_data)",
+              "doc": "Update required fields to match API response"
+            },
+            {
+              "name": "get_latest_signals",
+              "signature": "def get_latest_signals(self, pair, timeframe, limit)",
+              "doc": "Retrieve latest signals with optional filters\nArgs:\n    pair: Filter by trading pair\n    timeframe: Filter by timeframe\n    limit: Maximum results to return\nReturns:\n    List of signal dictionaries"
+            }
+          ]
+        }
+      ],
+      "dependencies": [
+        "config",
+        "utils"
+      ]
+    },
+    "get_entry_compare.py": {
+      "protected": false,
+      "description": "",
+      "type": "module",
+      "definitions": [
+        {
+          "type": "class",
+          "name": "SignalProcessor",
+          "signature": "class SignalProcessor()",
+          "doc": "",
+          "methods": [
+            {
+              "name": "__init__",
+              "signature": "def __init__(self, ticker)",
+              "doc": ""
+            },
+            {
+              "name": "get_signals",
+              "signature": "def get_signals(self)",
+              "doc": "Получаем сигналы для всех таймфреймов"
+            },
+            {
+              "name": "check_price_proximity",
+              "signature": "def check_price_proximity(self, price2, threshold)",
+              "doc": "Проверяет близость цен в пределах threshold"
+            },
+            {
+              "name": "find_matching_timeframes",
+              "signature": "def find_matching_timeframes(self, signals)",
+              "doc": "Находит совпадающие таймфреймы по направлению и цене"
+            },
+            {
+              "name": "generate_execution_signal",
+              "signature": "def generate_execution_signal(self, matched_tfs, signals)",
+              "doc": "Генерирует сигнал для исполнения"
+            },
+            {
+              "name": "process",
+              "signature": "def process(self)",
+              "doc": "Основной метод обработки сигналов"
+            },
+            {
+              "name": "calculate_quantity",
+              "signature": "def calculate_quantity(self, price)",
+              "doc": "Расчет объема позиции (заглушка)"
+            }
+          ]
+        }
+      ],
+      "dependencies": [
+        "telegram_bot",
+        "api_client"
+      ]
+    },
+    "logs/signals.log": {
+      "protected": false,
+      "type": "resource",
+      "description": "Resource file of type .log",
+      "dependencies": []
+    },
+    "order_generator.py": {
+      "protected": false,
+      "description": "Order Generator - Генерация ордеров и уведомлений\n===============================================\n\nМодуль для создания торговых ордеров и отправки уведомлений на основе\nпроанализированных торговых сигналов.\n\nОсновные функции:\n1. Создание уведомлений в Telegram\n2. Генерация шаблонов ордеров для Binance  \n3. Сохранение данных ордеров (опционально)\n4. Валидация параметров ордеров\n\nAuthor: HEDGER\nVersion: 1.0",
+      "type": "module",
+      "definitions": [
+        {
+          "type": "class",
+          "name": "OrderGenerator",
+          "signature": "class OrderGenerator()",
+          "doc": "Генератор торговых ордеров и уведомлений\n\nОсновные функции:\n1. Создание уведомлений для Telegram\n2. Генерация шаблонов ордеров для бирж\n3. Расчет оптимальных параметров ордера\n4. Сохранение истории ордеров",
+          "methods": [
+            {
+              "name": "__init__",
+              "signature": "def __init__(self)",
+              "doc": "Инициализация генератора ордеров"
+            },
+            {
+              "name": "create_telegram_alert",
+              "signature": "def create_telegram_alert(self, signal_data)",
+              "doc": "Создает и отправляет уведомление в Telegram\n\nArgs:\n    signal_data: Консолидированные данные сигнала\n    \nReturns:\n    bool: True если уведомление отправлено успешно"
+            },
+            {
+              "name": "create_binance_template",
+              "signature": "def create_binance_template(self, signal_data)",
+              "doc": "Создает шаблон ордера для Binance\n\nArgs:\n    signal_data: Консолидированные данные сигнала\n    \nReturns:\n    Optional[Dict]: Шаблон ордера или None при ошибке"
+            },
+            {
+              "name": "_select_stop_loss_from_larger_timeframe",
+              "signature": "def _select_stop_loss_from_larger_timeframe(self, signal_data)",
+              "doc": "Выбирает стоп-лосс с большего таймфрейма из совпадающих\n\nArgs:\n    signal_data: Данные сигнала с информацией о таймфреймах\n    \nReturns:\n    float: Оптимальный стоп-лосс"
+            },
+            {
+              "name": "_calculate_position_size",
+              "signature": "def _calculate_position_size(self, signal_data)",
+              "doc": "Рассчитывает размер позиции (базовая логика)\n\nArgs:\n    signal_data: Данные сигнала\n    \nReturns:\n    float: Размер позиции"
+            },
+            {
+              "name": "_calculate_risk_reward_ratio",
+              "signature": "def _calculate_risk_reward_ratio(self, entry_price, stop_loss, take_profit, signal_direction)",
+              "doc": "Рассчитывает соотношение риск/прибыль\n\nArgs:\n    entry_price: Цена входа\n    stop_loss: Стоп-лосс\n    take_profit: Тейк-профит\n    signal_direction: Направление сигнала (LONG/SHORT)\n    \nReturns:\n    float: Соотношение риск/прибыль"
+            },
+            {
+              "name": "_validate_order_params",
+              "signature": "def _validate_order_params(self, order_template)",
+              "doc": "Валидирует параметры ордера\n\nArgs:\n    order_template: Шаблон ордера для проверки\n    \nReturns:\n    bool: True если параметры корректны"
+            },
+            {
+              "name": "_log_signal_details",
+              "signature": "def _log_signal_details(self, signal_data)",
+              "doc": "Детальное логирование информации о сигнале"
+            },
+            {
+              "name": "_log_order_details",
+              "signature": "def _log_order_details(self, order_template)",
+              "doc": "Детальное логирование информации об ордере"
+            },
+            {
+              "name": "_format_telegram_message",
+              "signature": "def _format_telegram_message(self, signal_data)",
+              "doc": "Форматирует сообщение для Telegram\n\nArgs:\n    signal_data: Данные сигнала\n    \nReturns:\n    str: Отформатированное сообщение"
+            },
+            {
+              "name": "_save_order_to_database",
+              "signature": "def _save_order_to_database(self, order_template)",
+              "doc": "Сохраняет ордер в базу данных (если доступна)\n\nArgs:\n    order_template: Шаблон ордера\n    \nReturns:\n    bool: True если сохранено успешно"
+            },
+            {
+              "name": "process_signal",
+              "signature": "def process_signal(self, signal_data)",
+              "doc": "Полная обработка сигнала: создание уведомления и ордера\n\nArgs:\n    signal_data: Консолидированные данные сигнала\n    \nReturns:\n    bool: True если обработка прошла успешно"
+            }
+          ]
+        },
+        {
+          "type": "function",
+          "name": "process_trading_signal",
+          "signature": "def process_trading_signal(signal_data)",
+          "doc": "Convenience function для обработки торгового сигнала\n\nArgs:\n    signal_data: Данные сигнала для обработки\n    \nReturns:\n    bool: True если обработка успешна"
+        }
+      ],
+      "dependencies": [
+        "telegram_bot",
+        "config",
+        "utils",
+        "database"
+      ]
+    },
+    "project_manifest.py": {
+      "protected": false,
+      "description": "",
+      "type": "module",
+      "definitions": [],
+      "dependencies": []
+    },
+    "signal_analyzer.py": {
+      "protected": false,
+      "description": "Signal Analyzer - Анализ торговых сигналов\n==========================================\n\nМодуль для получения и анализа торговых сигналов с нескольких таймфреймов.\nОсновная задача - найти схождения между таймфреймами по направлению и цене.\n\nAuthor: HEDGER\nVersion: 1.0",
+      "type": "module",
+      "definitions": [
+        {
+          "type": "class",
+          "name": "SignalAnalyzer",
+          "signature": "class SignalAnalyzer()",
+          "doc": "Анализатор торговых сигналов\n\nОсновные функции:\n1. Получение сигналов с нескольких таймфреймов\n2. Анализ схождений по направлению и цене\n3. Валидация качества сигналов",
+          "methods": [
+            {
+              "name": "__init__",
+              "signature": "def __init__(self, ticker)",
+              "doc": "Инициализация анализатора для конкретного тикера\n\nArgs:\n    ticker: Торговая пара (например, \"BTCUSDT\")"
+            },
+            {
+              "name": "fetch_all_signals",
+              "signature": "def fetch_all_signals(self, stop_event)",
+              "doc": "Получает сигналы для всех таймфреймов с retry логикой\n\nArgs:\n    stop_event: Event для прерывания процесса\n    \nReturns:\n    Dict[str, Optional[Dict]]: Словарь сигналов по таймфреймам\n    \nExample:\n    {\n        \"15m\": {\"signal\": \"LONG\", \"entry_price\": 45000, ...},\n        \"1h\": {\"signal\": \"LONG\", \"entry_price\": 45100, ...},\n        \"4h\": None  # не получен\n    }"
+            },
+            {
+              "name": "_fetch_single_signal",
+              "signature": "def _fetch_single_signal(self, timeframe)",
+              "doc": "Получает сигнал для одного таймфрейма с retry логикой\n\nArgs:\n    timeframe: Таймфрейм для запроса\n    \nReturns:\n    Optional[Dict]: Данные сигнала или None"
+            },
+            {
+              "name": "analyze_convergence",
+              "signature": "def analyze_convergence(self, signals)",
+              "doc": "Анализирует схождения между таймфреймами\n\nИщет таймфреймы с:\n1. Одинаковым направлением сигнала (LONG/SHORT)\n2. Близкими ценами входа (в пределах price_threshold)\n\nArgs:\n    signals: Словарь сигналов по таймфреймам (могут быть None)\n    \nReturns:\n    Optional[Set[str]]: Множество совпадающих таймфреймов или None"
+            },
+            {
+              "name": "_check_convergence",
+              "signature": "def _check_convergence(self, signal1, signal2)",
+              "doc": "Проверяет схождение между двумя сигналами\n\nArgs:\n    signal1, signal2: Данные сигналов для сравнения\n    \nReturns:\n    bool: True если сигналы схожи"
+            },
+            {
+              "name": "_check_price_proximity",
+              "signature": "def _check_price_proximity(self, price1, price2)",
+              "doc": "Проверяет близость двух цен в пределах threshold\n\nArgs:\n    price1, price2: Цены для сравнения\n    \nReturns:\n    bool: True если цены достаточно близки"
+            },
+            {
+              "name": "create_signal_data",
+              "signature": "def create_signal_data(self, matched_timeframes, signals)",
+              "doc": "Создает консолидированные данные сигнала из совпадающих таймфреймов\n\nArgs:\n    matched_timeframes: Множество совпадающих таймфреймов\n    signals: Все сигналы по таймфреймам (могут содержать None)\n    \nReturns:\n    Dict: Консолидированный сигнал"
+            },
+            {
+              "name": "_calculate_average",
+              "signature": "def _calculate_average(self, values)",
+              "doc": "Вычисляет среднее значение, игнорируя None и 0"
+            },
+            {
+              "name": "_validate_signal_data",
+              "signature": "def _validate_signal_data(self, signal)",
+              "doc": "Валидирует полученные данные сигнала\n\nArgs:\n    signal: Данные сигнала для проверки\n    \nReturns:\n    bool: True если данные корректны"
+            },
+            {
+              "name": "analyze_ticker",
+              "signature": "def analyze_ticker(self, stop_event)",
+              "doc": "Полный анализ тикера: получение сигналов + поиск схождений\n\nArgs:\n    stop_event: Event для прерывания процесса\n    \nReturns:\n    Optional[Dict]: Консолидированный сигнал или None"
+            }
+          ]
+        },
+        {
+          "type": "function",
+          "name": "analyze_ticker_signals",
+          "signature": "def analyze_ticker_signals(ticker, stop_event)",
+          "doc": "Convenience function для анализа одного тикера\n\nArgs:\n    ticker: Торговая пара для анализа\n    stop_event: Event для прерывания\n    \nReturns:\n    Optional[Dict]: Результат анализа или None"
+        }
+      ],
+      "dependencies": [
+        "api_client",
+        "config",
+        "utils"
+      ]
+    },
+    "signals.db": {
+      "protected": false,
+      "type": "resource",
+      "description": "Resource file of type .db",
+      "dependencies": []
+    },
+    "telegram_bot.py": {
+      "protected": false,
+      "description": "",
+      "type": "module",
+      "definitions": [
+        {
+          "type": "class",
+          "name": "TelegramBot",
+          "signature": "class TelegramBot()",
+          "doc": "",
+          "methods": [
+            {
+              "name": "__init__",
+              "signature": "def __init__(self)",
+              "doc": ""
+            },
+            {
+              "name": "_send_request",
+              "signature": "def _send_request(self, payload)",
+              "doc": "Core request handler with retry logic"
+            },
+            {
+              "name": "send_signal",
+              "signature": "def send_signal(self, signal)",
+              "doc": "Format and send trading signal"
+            },
+            {
+              "name": "_format_message",
+              "signature": "def _format_message(self)",
+              "doc": "Generate clean signal message"
+            }
+          ]
+        }
+      ],
+      "dependencies": [
+        "config",
+        "utils"
+      ]
+    },
+    "ticker_monitor.py": {
+      "protected": false,
+      "description": "Enhanced Ticker Monitor - Интеграция с существующим API и форматом файлов\n========================================================================\n\nАдаптирован под:\n1. Загрузку тикеров из COIN_SYMBOLS в tickers.txt\n2. Работу с существующим API клиентом\n3. Логику из рабочего get_entry_compare.py\n\nAuthor: HEDGER\nVersion: 2.1",
+      "type": "module",
+      "definitions": [
+        {
+          "type": "class",
+          "name": "EnhancedSignalProcessor",
+          "signature": "class EnhancedSignalProcessor()",
+          "doc": "Процессор сигналов, адаптированный под существующую логику\nОснован на get_entry_compare.py",
+          "methods": [
+            {
+              "name": "__init__",
+              "signature": "def __init__(self, ticker)",
+              "doc": ""
+            },
+            {
+              "name": "get_signals",
+              "signature": "def get_signals(self)",
+              "doc": "Получаем сигналы для всех таймфреймов (как в get_entry_compare.py)"
+            },
+            {
+              "name": "_validate_signal",
+              "signature": "def _validate_signal(self, signal)",
+              "doc": "Валидация сигнала"
+            },
+            {
+              "name": "check_price_proximity",
+              "signature": "def check_price_proximity(self, price2, threshold)",
+              "doc": "Проверяет близость цен в пределах threshold (из get_entry_compare.py)"
+            },
+            {
+              "name": "find_matching_timeframes",
+              "signature": "def find_matching_timeframes(self, signals)",
+              "doc": "Находит совпадающие таймфреймы (логика из get_entry_compare.py)"
+            },
+            {
+              "name": "generate_execution_signal",
+              "signature": "def generate_execution_signal(self, matched_tfs, signals)",
+              "doc": "Генерирует сигнал для исполнения (логика из get_entry_compare.py)"
+            },
+            {
+              "name": "process",
+              "signature": "def process(self)",
+              "doc": "Основной метод обработки (адаптация из get_entry_compare.py)"
+            }
+          ]
+        },
+        {
+          "type": "class",
+          "name": "EnhancedTickerMonitor",
+          "signature": "class EnhancedTickerMonitor()",
+          "doc": "Улучшенный оркестратор с правильной интеграцией",
+          "methods": [
+            {
+              "name": "__init__",
+              "signature": "def __init__(self, tickers_file, max_workers)",
+              "doc": ""
+            },
+            {
+              "name": "_load_tickers",
+              "signature": "def _load_tickers(self)",
+              "doc": "Загружает тикеры из COIN_SYMBOLS"
+            },
+            {
+              "name": "_setup_signal_handlers",
+              "signature": "def _setup_signal_handlers(self)",
+              "doc": "Настройка обработчиков сигналов прерывания"
+            },
+            {
+              "name": "_fill_queue",
+              "signature": "def _fill_queue(self)",
+              "doc": "Заполняет очередь тикерами"
+            },
+            {
+              "name": "_update_stats",
+              "signature": "def _update_stats(self, processed, signals)",
+              "doc": "Thread-safe обновление статистики"
+            },
+            {
+              "name": "_worker",
+              "signature": "def _worker(self)",
+              "doc": "Рабочий поток"
+            },
+            {
+              "name": "_start_workers",
+              "signature": "def _start_workers(self, num_workers)",
+              "doc": "Запускает рабочие потоки"
+            },
+            {
+              "name": "_wait_for_completion",
+              "signature": "def _wait_for_completion(self)",
+              "doc": "Ожидает завершения обработки"
+            },
+            {
+              "name": "_log_batch_summary",
+              "signature": "def _log_batch_summary(self)",
+              "doc": "Логирует итоги обработки"
+            },
+            {
+              "name": "process_tickers",
+              "signature": "def process_tickers(self)",
+              "doc": "Основной метод обработки тикеров"
+            },
+            {
+              "name": "run",
+              "signature": "def run(self)",
+              "doc": "Запуск оркестратора по расписанию"
+            },
+            {
+              "name": "get_status",
+              "signature": "def get_status(self)",
+              "doc": "Возвращает статус системы"
+            }
+          ]
+        },
+        {
+          "type": "function",
+          "name": "main",
+          "signature": "def main()",
+          "doc": "Точка входа в приложение"
+        }
+      ],
+      "dependencies": [
+        "api_client",
+        "telegram_bot",
+        "utils",
+        "config"
+      ]
+    },
+    "tickers.txt": {
+      "protected": false,
+      "type": "resource",
+      "description": "Resource file of type .txt",
+      "dependencies": []
+    },
+    "tickers_full.txt": {
+      "protected": false,
+      "type": "resource",
+      "description": "Resource file of type .txt",
+      "dependencies": []
+    },
+    "utils.py": {
+      "protected": true,
+      "description": "",
+      "type": "module",
+      "definitions": [
+        {
+          "type": "function",
+          "name": "setup_logger",
+          "signature": "def setup_logger(name)",
+          "doc": "Centralized logging setup"
+        }
+      ],
+      "dependencies": [
+        "config"
+      ]
+    }
+  }
+}
