@@ -50,7 +50,7 @@ echo ⏰ Start time: %date% %time%
 echo.
 
 REM Запускаем систему
-python main_launcher.py
+python ticker_monitor.py
 
 echo.
 echo System stopped.
