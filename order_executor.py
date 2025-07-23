@@ -29,14 +29,27 @@ import asyncio
 from utils import logger
 from telegram_bot import telegram_bot
 from symbol_cache import get_symbol_cache, round_price_for_symbol, round_quantity_for_symbol
-from config import BINANCE_API_KEY, BINANCE_API_SECRET, BINANCE_TESTNET, MULTIPLE_ORDERS, RISK_PERCENT, FUTURES_LEVERAGE, FUTURES_MARGIN_TYPE
+from config import BINANCE_API_KEY, BINANCE_API_SECRET, BINANCE_TESTNET, MULTIPLE_ORDERS, MAX_CONCURRENT_ORDERS, RISK_PERCENT, FUTURES_LEVERAGE, FUTURES_MARGIN_TYPE
 
 # Binance
 from binance.client import Client
 from binance.exceptions import BinanceAPIException
 
-# Мониторинг ордеров  
-from websocket_monitor import order_monitor
+# Мониторинг ордеров через Orders Watchdog
+try:
+    from orders_watchdog import watchdog_api
+    WATCHDOG_AVAILABLE = True
+    logger.info("✅ Orders Watchdog API подключен")
+except ImportError:
+    logger.warning("⚠️ Orders Watchdog не доступен, используем старый мониторинг")
+    WATCHDOG_AVAILABLE = False
+    watchdog_api = None
+    # Fallback к старому мониторингу
+    try:
+        from websocket_monitor import order_monitor
+    except ImportError:
+        logger.warning("⚠️ websocket_monitor тоже недоступен")
+        order_monitor = None
 
 # Теперь используем константы из config.py вместо локальных
 
@@ -179,18 +192,22 @@ class OrderExecutor:
             return False
         
         try:
+            # Для фьючерсов: CROSS -> CROSSED, ISOLATED остается ISOLATED
+            futures_margin_type = 'CROSSED' if FUTURES_MARGIN_TYPE == 'CROSS' else 'ISOLATED'
+            
             # Устанавливаем режим маржи из конфигурации
             result = self.binance_client.futures_change_margin_type(
                 symbol=ticker,
-                marginType=FUTURES_MARGIN_TYPE  # ИСПРАВЛЕНО: marginType вместо margintype
+                marginType=futures_margin_type  # Используем marginType (camelCase) для Futures API
             )
-            logger.info(f"✅ Режим маржи {FUTURES_MARGIN_TYPE} установлен для {ticker}")
+            logger.info(f"✅ Режим маржи {futures_margin_type} установлен для {ticker}")
             return True
         except Exception as e:
             # Если режим уже установлен, это не ошибка
             error_msg = str(e).lower()
             if "no need to change margin type" in error_msg or "margin type is the same" in error_msg:
-                logger.info(f"✅ Режим маржи {FUTURES_MARGIN_TYPE} уже установлен для {ticker}")
+                futures_margin_type = 'CROSSED' if FUTURES_MARGIN_TYPE == 'CROSS' else 'ISOLATED'
+                logger.info(f"✅ Режим маржи {futures_margin_type} уже установлен для {ticker}")
                 return True
             else:
                 logger.warning(f"⚠️ Не удалось установить режим маржи для {ticker}: {e}")
@@ -315,8 +332,19 @@ class OrderExecutor:
                         'existing_position': position_info
                     }
                 else:
-                    # Разрешено открывать повторные ордера
+                    # Разрешено открывать повторные ордера - проверяем лимит
                     self._send_multiple_orders_allowed_notification(ticker, signal_data, position_info)
+                    
+                    # Проверяем количество открытых ордеров по символу
+                    open_orders_count = self._count_open_orders_for_symbol(ticker)
+                    if open_orders_count >= MAX_CONCURRENT_ORDERS:
+                        self._send_max_orders_limit_notification(ticker, signal_data, open_orders_count)
+                        return {
+                            'success': False,
+                            'error': f'Достигнут лимит ордеров для {ticker}: {open_orders_count}/{MAX_CONCURRENT_ORDERS}',
+                            'signal_data': signal_data,
+                            'open_orders_count': open_orders_count
+                        }
                     # Продолжаем выполнение...
             
             # Настраиваем параметры символа (плечо и режим маржи)
@@ -400,6 +428,28 @@ class OrderExecutor:
         except BinanceAPIException as e:
             error_msg = f"Binance API ошибка: {e.message}"
             logger.error(f"❌ {error_msg}")
+            
+            # Специальная обработка для правил Binance
+            if "Quantitative Rules violated" in str(e.message):
+                logger.warning(f"⚠️ Binance ограничения для {ticker} - пропускаем торговлю")
+                # Отправляем уведомление о временном блоке
+                try:
+                    message = f"""
+🚨 <b>ОГРАНИЧЕНИЕ BINANCE</b> 🚨
+
+📊 <b>Символ:</b> {ticker}
+📈 <b>Сигнал:</b> {signal_data['signal_type']}
+❌ <b>Ошибка:</b> Quantitative Rules Violation
+
+⚠️ <b>Торговля временно заблокирована Binance</b>
+🔄 <b>Попробуйте позже</b>
+
+⏰ {datetime.now().strftime('%H:%M:%S')}
+"""
+                    telegram_bot.send_message(message)
+                except:
+                    pass
+                    
             return {
                 'success': False,
                 'error': error_msg,
@@ -465,6 +515,9 @@ class OrderExecutor:
             stop_order_id = order_result['stop_order']['orderId']
             tp_order_id = order_result['tp_order']['orderId']
             
+            # Для корректного отображения типа маржи в уведомлении
+            display_margin_type = 'CROSSED' if FUTURES_MARGIN_TYPE == 'CROSS' else 'ISOLATED'
+            
             message = f"""
 🚀 <b>ОРДЕР РАЗМЕЩЕН!</b> 🚀
 
@@ -473,7 +526,7 @@ class OrderExecutor:
 💰 <b>Объем:</b> {quantity}
 💵 <b>Сумма:</b> {usdt_amount:.2f} USDT
 ⚡ <b>Плечо:</b> {FUTURES_LEVERAGE}x
-🔧 <b>Режим маржи:</b> {FUTURES_MARGIN_TYPE}
+🔧 <b>Режим маржи:</b> {display_margin_type}
 
 🎯 <b>Цены:</b>
 • Entry: {signal_data['entry_price']:.6f}
@@ -602,14 +655,58 @@ class OrderExecutor:
     def _add_to_monitoring(self, order_result: Dict) -> None:
         """Добавляет ордер в мониторинг"""
         try:
-            # Добавляем группу ордеров в REST мониторинг
-            order_monitor.add_order_group(order_result)
-            
-            ticker = order_result['signal_data']['ticker']
-            logger.info(f"👁️ Ордера {ticker} переданы в REST API мониторинг")
+            # Проверяем доступность старого мониторинга
+            if order_monitor:
+                # Добавляем группу ордеров в REST мониторинг
+                order_monitor.add_order_group(order_result)
+                
+                ticker = order_result['signal_data']['ticker']
+                logger.info(f"👁️ Ордера {ticker} переданы в REST API мониторинг")
+            else:
+                logger.warning("⚠️ Старый order_monitor недоступен")
             
         except Exception as e:
             logger.error(f"❌ Ошибка добавления в мониторинг: {e}")
+
+    def _count_open_orders_for_symbol(self, symbol: str) -> int:
+        """Подсчитывает количество открытых ордеров для символа"""
+        try:
+            if not self.binance_client:
+                return 0
+                
+            open_orders = self.binance_client.futures_get_open_orders(symbol=symbol)
+            return len(open_orders)
+            
+        except Exception as e:
+            logger.error(f"❌ Ошибка подсчета ордеров для {symbol}: {e}")
+            return 0
+    
+    def _send_max_orders_limit_notification(self, ticker: str, signal_data: Dict, open_orders_count: int) -> None:
+        """Уведомление о достижении лимита ордеров"""
+        try:
+            signal_type = signal_data.get('signal', 'N/A')
+            entry_price = signal_data.get('entry_price', 0)
+            
+            message = f"""
+⚠️ <b>ЛИМИТ ОРДЕРОВ ДОСТИГНУТ</b> ⚠️
+
+📊 <b>Символ:</b> {ticker}
+🎯 <b>Сигнал (отклонен):</b> {signal_type}
+💵 <b>Цена сигнала:</b> {entry_price}
+
+📈 <b>Открытых ордеров:</b> {open_orders_count}/{MAX_CONCURRENT_ORDERS}
+⚙️ <b>MAX_CONCURRENT_ORDERS = {MAX_CONCURRENT_ORDERS}</b>
+
+❌ <b>Новый ордер НЕ размещен</b>
+
+⏰ {datetime.now().strftime('%H:%M:%S')}
+"""
+            
+            telegram_bot.send_message(message)
+            logger.info(f"📱 Уведомление о лимите ордеров для {ticker} отправлено")
+            
+        except Exception as e:
+            logger.error(f"❌ Ошибка отправки уведомления о лимите: {e}")
 
 
 class OrderLifecycleManager:
@@ -707,8 +804,8 @@ class OrderLifecycleManager:
             # Отправляем уведомление о размещении
             self._send_main_order_placed_notification(order_info)
             
-            # Запускаем WebSocket мониторинг для этого ордера
-            self._start_order_monitoring(ticker, main_order['orderId'])
+            # Добавляем ордер в Orders Watchdog для мониторинга
+            self._add_to_watchdog_monitoring(order_info)
             
             return {
                 'success': True,
@@ -853,6 +950,55 @@ class OrderLifecycleManager:
                 # Удаляем из отслеживания
                 del self.pending_orders[ticker]
     
+    def _add_to_watchdog_monitoring(self, order_info: Dict):
+        """Добавляет ордер в Orders Watchdog для мониторинга"""
+        try:
+            if not WATCHDOG_AVAILABLE:
+                logger.warning("⚠️ Orders Watchdog недоступен, используем старый мониторинг")
+                # Fallback к старому мониторингу
+                self._start_order_monitoring_fallback(order_info)
+                return
+            
+            signal_data = order_info['signal_data']
+            
+            # Подготавливаем данные для watchdog
+            watchdog_data = {
+                'symbol': signal_data['ticker'],
+                'order_id': order_info['main_order_id'],
+                'side': order_info['side'],
+                'position_side': order_info['position_side'],
+                'quantity': order_info['quantity'],
+                'price': order_info['entry_price_rounded'],
+                'signal_type': signal_data['signal'],
+                'stop_loss': signal_data['stop_loss'],
+                'take_profit': signal_data['take_profit']
+            }
+            
+            # Отправляем в Orders Watchdog
+            if watchdog_api and watchdog_api.add_order_for_monitoring(watchdog_data):
+                logger.info(f"🐕 Ордер {signal_data['ticker']} добавлен в Orders Watchdog")
+            else:
+                logger.error(f"❌ Не удалось добавить ордер {signal_data['ticker']} в Orders Watchdog")
+                # Fallback к старому мониторингу
+                self._start_order_monitoring_fallback(order_info)
+                
+        except Exception as e:
+            logger.error(f"❌ Ошибка добавления в Orders Watchdog: {e}")
+            # Fallback к старому мониторингу
+            self._start_order_monitoring_fallback(order_info)
+    
+    def _start_order_monitoring_fallback(self, order_info: Dict):
+        """Fallback к старому мониторингу если Orders Watchdog недоступен"""
+        try:
+            ticker = order_info['signal_data']['ticker']
+            order_id = order_info['main_order_id']
+            
+            logger.info(f"🔄 Используем fallback мониторинг для {ticker} ордера {order_id}")
+            self._start_timeout_timer(ticker, order_id)
+            
+        except Exception as e:
+            logger.error(f"❌ Ошибка fallback мониторинга: {e}")
+    
     def _start_order_monitoring(self, ticker: str, order_id: str):
         """
         Запускает WebSocket мониторинг для ордера
@@ -903,20 +1049,21 @@ class OrderLifecycleManager:
             ticker = signal_data['ticker']
             
             message = f"""
-📋 <b>ЛИМИТНЫЙ ОРДЕР РАЗМЕЩЕН</b> 📋
+� <b>ОРДЕР РАЗМЕЩЕН!</b> �
 
 📊 <b>Символ:</b> {ticker}
 📈 <b>Направление:</b> {signal_data['signal']}
 💰 <b>Объем:</b> {order_info['quantity']}
 💵 <b>Сумма:</b> {order_info['usdt_amount']:.2f} USDT
 ⚡ <b>Плечо:</b> {FUTURES_LEVERAGE}x
-🔧 <b>Режим маржи:</b> {FUTURES_MARGIN_TYPE}
 
-🎯 <b>Цена входа:</b> {order_info['entry_price_rounded']:.6f}
+🎯 <b>Orders:</b>
+• Limit: {order_info['entry_price_rounded']:.6f}
+• Stop: {signal_data['stop_loss']:.6f}
+• Target: {signal_data['take_profit']:.6f}
 
-🆔 <b>Ордер:</b> {order_info['main_order_id']}
-
-⏳ <b>Ожидаем исполнения...</b>
+📊 <b>Схождение:</b> {signal_data.get('timeframes_str', 'N/A')}
+🎯 <b>Уверенность:</b> {signal_data.get('confidence', 0):.1%}
 
 ⏰ {datetime.now().strftime('%H:%M:%S')}
 """

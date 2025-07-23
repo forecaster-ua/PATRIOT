@@ -141,7 +141,6 @@ class ProductionOrderValidator:
                 return False, f"Invalid price: {price}"
                 
             # Проверка разумности цены (не более чем в 2 раза от текущей цены)
-            # TODO: можно добавить проверку через API текущей цены
                 
         return True, "Order parameters valid"
         

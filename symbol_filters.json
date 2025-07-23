@@ -1,5 +1,5 @@
 {
-  "timestamp": "2025-07-20T22:09:49.250531",
+  "timestamp": "2025-07-23T01:14:01.544171",
   "symbols": {
     "BTCUSDT": {
       "status": "TRADING",
@@ -96,7 +96,7 @@
       "max_price": "20000",
       "step_size": "1",
       "min_qty": "1",
-      "max_qty": "2000000",
+      "max_qty": "6000000",
       "precision_price": 4,
       "precision_qty": 1
     },
@@ -162,7 +162,7 @@
       "max_price": "1000",
       "step_size": "0.1",
       "min_qty": "0.1",
-      "max_qty": "1000000",
+      "max_qty": "5000000",
       "precision_price": 4,
       "precision_qty": 1
     },
@@ -701,7 +701,7 @@
       "max_price": "2000",
       "step_size": "0.1",
       "min_qty": "0.1",
-      "max_qty": "1000000",
+      "max_qty": "5000000",
       "precision_price": 4,
       "precision_qty": 1
     },

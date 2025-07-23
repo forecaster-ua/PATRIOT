@@ -1,0 +1,102 @@
+# PATRIOT Trading System - Python Dependencies
+# ==================================================
+# Requirements for Ubuntu Server deployment
+# Install: pip install -r requirements.txt
+
+# ============================================
+# CORE DEPENDENCIES
+# ============================================
+
+# Binance API integration
+python-binance==1.0.19
+
+# HTTP requests for API calls
+requests==2.31.0
+
+# Task scheduling
+schedule==1.2.0
+
+# Advanced retry mechanism with backoff
+tenacity==8.2.3
+
+# Table formatting for console output
+tabulate==0.9.0
+
+# ============================================
+# DATA & TIME HANDLING  
+# ============================================
+
+# Enhanced timezone handling (if needed)
+pytz==2023.3
+
+# ============================================
+# DEVELOPMENT & TESTING
+# ============================================
+
+# Code formatting (optional for deployment)
+# black==23.7.0
+
+# Linting (optional for deployment)  
+# flake8==6.1.0
+
+# ============================================
+# SYSTEM DEPENDENCIES (Ubuntu/Debian)
+# ============================================
+# Install these via apt before pip install:
+#
+# sudo apt update
+# sudo apt install -y python3 python3-pip python3-venv
+# sudo apt install -y git curl wget
+#
+# For SSL/TLS support:
+# sudo apt install -y ca-certificates 
+#
+# For timezone data:
+# sudo apt install -y tzdata
+
+# ============================================
+# PYTHON VERSION REQUIREMENT
+# ============================================
+# Python 3.8+ required (for typing features, walrus operator)
+# Tested on Python 3.8, 3.9, 3.10, 3.11
+
+# ============================================
+# OPTIONAL DEPENDENCIES
+# ============================================
+
+# For enhanced JSON handling (already in Python 3.8+)
+# orjson==3.9.5
+
+# For async support (if needed in future)  
+# aiohttp==3.8.5
+# asyncio (built-in)
+
+# For enhanced websocket support (if needed)
+# websocket-client==1.6.1
+
+# ============================================
+# PRODUCTION DEPLOYMENT NOTES
+# ============================================
+# 
+# 1. Virtual Environment Setup:
+#    python3 -m venv patriot_env
+#    source patriot_env/bin/activate
+#    pip install -r requirements.txt
+#
+# 2. Environment Variables:
+#    cp .env.example .env
+#    # Edit .env with your API keys
+#
+# 3. System Service (optional):
+#    # Create systemd service for auto-start
+#    # See PRODUCTION_DEPLOYMENT_GUIDE.md
+#
+# 4. Log Rotation:
+#    # Configure logrotate for log files
+#    # Default logs in logs/ directory
+#
+# 5. Firewall:
+#    # Only outbound HTTPS (443) needed for APIs
+#    # No incoming ports required
+#
+# ============================================

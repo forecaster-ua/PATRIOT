@@ -115,6 +115,7 @@ PRICE_TOLERANCE_PERCENT = float(os.getenv("PRICE_TOLERANCE_PERCENT", "1.0"))  # 
 
 # 🔧 Настройки управления позициями
 MULTIPLE_ORDERS = os.getenv("MULTIPLE_ORDERS", "false").lower() == "true"  # Разрешить несколько ордеров на один тикер
+MAX_CONCURRENT_ORDERS = int(os.getenv("MAX_CONCURRENT_ORDERS", "3"))  # Максимум одновременных ордеров на инструмент
 
 # --- Telegram Configuration ---
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_TOKEN", "7948515996:AAHg9Tnvex3xyRc0rjnMscYTbHM1EUU5-d4")
