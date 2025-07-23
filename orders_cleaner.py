@@ -40,6 +40,9 @@ try:
 except ImportError:
     logger.error("❌ python-binance not installed")
     BINANCE_AVAILABLE = False
+    # Define dummy classes for type safety
+    Client = None
+    BinanceAPIException = Exception
 
 
 class OrdersCleaner:
@@ -55,7 +58,7 @@ class OrdersCleaner:
     
     def _init_client(self) -> None:
         """Инициализация Binance клиента"""
-        if not BINANCE_AVAILABLE:
+        if not BINANCE_AVAILABLE or Client is None:
             logger.error("❌ Binance library not available")
             return
             
@@ -136,9 +139,50 @@ class OrdersCleaner:
             logger.error(f"❌ Ошибка анализа ордеров: {e}")
             return {"error": str(e)}
     
+    def _load_watchdog_orders(self) -> List:
+        """Загружает ордера под наблюдением Orders Watchdog"""
+        try:
+            watchdog_file = Path('orders_watchdog_state.json')
+            if not watchdog_file.exists():
+                logger.warning("⚠️ Файл состояния Orders Watchdog не найден")
+                return []
+            
+            with open(watchdog_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                return data.get('watched_orders', [])
+                
+        except Exception as e:
+            logger.warning(f"⚠️ Ошибка загрузки состояния Watchdog: {e}")
+            return []
+    
+    def _check_orders_under_watchdog(self, orders: List[Dict], watchdog_orders: List) -> bool:
+        """Проверяет, находятся ли ордера под наблюдением Watchdog"""
+        if not watchdog_orders:
+            return False
+        
+        # Проверяем есть ли хотя бы один ордер под наблюдением
+        for order in orders:
+            order_id = str(order['order_id'])
+            # Ищем в списке watched_orders
+            for watched_order in watchdog_orders:
+                if isinstance(watched_order, dict):
+                    # Проверяем основной ордер
+                    if watched_order.get('order_id') == order_id:
+                        return True
+                    # Проверяем SL/TP ордера
+                    if watched_order.get('sl_order_id') == order_id:
+                        return True
+                    if watched_order.get('tp_order_id') == order_id:
+                        return True
+        
+        return False
+    
     def _analyze_symbols(self) -> Dict:
         """Анализирует символы на предмет сиротских ордеров"""
         analysis = {}
+        
+        # Загружаем состояние Orders Watchdog для проверки
+        watchdog_orders = self._load_watchdog_orders()
         
         # Проверяем все символы с ордерами
         for symbol, orders in self.orders.items():
@@ -159,12 +203,36 @@ class OrdersCleaner:
                     # Неизвестный тип - считаем как entry для безопасности
                     entry_orders.append(order)
             
-            # Определяем статус символа
-            is_orphaned = (
+            # Проверяем, находятся ли ордера под наблюдением Watchdog
+            orders_under_watchdog = self._check_orders_under_watchdog(orders, watchdog_orders)
+            
+            # Определяем статус символа - ДВА ТИПА СИРОТСКИХ ОРДЕРОВ:
+            # 1. Классические сироты: только SL/TP без позиций
+            classic_orphaned = (
                 not has_position and           # Нет открытой позиции
                 len(entry_orders) == 0 and    # Нет ордеров на открытие
                 len(exit_orders) > 0           # Есть только SL/TP ордера
             )
+            
+            # 2. Висящие лимитки: лимитные ордера без позиций И НЕ ПОД НАБЛЮДЕНИЕМ
+            hanging_limits = (
+                not has_position and           # Нет открытой позиции
+                len(entry_orders) > 0 and     # Есть ордера на открытие
+                len(exit_orders) == 0 and     # Нет ордеров на закрытие
+                not orders_under_watchdog      # НЕ под наблюдением Watchdog
+            )
+            
+            is_orphaned = classic_orphaned or hanging_limits
+            
+            # Определяем статус для отчета
+            if orders_under_watchdog and not has_position:
+                status = 'under_watchdog'
+            elif classic_orphaned:
+                status = 'classic'
+            elif hanging_limits:
+                status = 'hanging_limits'
+            else:
+                status = 'none'
             
             analysis[symbol] = {
                 'has_position': has_position,
@@ -173,6 +241,8 @@ class OrdersCleaner:
                 'entry_orders': len(entry_orders),
                 'exit_orders': len(exit_orders),
                 'is_orphaned': is_orphaned,
+                'orphan_type': status,
+                'under_watchdog': orders_under_watchdog,
                 'orders_detail': {
                     'entry': entry_orders,
                     'exit': exit_orders
@@ -214,26 +284,75 @@ class OrdersCleaner:
             print(f"\n🧹 СИРОТСКИЕ СИМВОЛЫ ({len(orphaned_symbols)}):")
             print("-" * 60)
             
+            # Группируем по типу
+            classic_orphans = []
+            hanging_limits = []
+            
             for symbol in sorted(orphaned_symbols):
                 data = analysis[symbol]
-                print(f"\n📊 {symbol}:")
-                print(f"  • Позиция: ❌ НЕТ")
-                print(f"  • Всего ордеров: {data['total_orders']}")
-                print(f"  • Ордера на открытие: {data['entry_orders']}")
-                print(f"  • Ордера на закрытие: {data['exit_orders']}")
-                
-                # Детали ордеров на закрытие
-                exit_orders = data['orders_detail']['exit']
-                for order in exit_orders:
-                    order_type = order['type']
-                    side = order['side']
-                    price_info = ""
-                    if order['price']:
-                        price_info = f" @ {order['price']:.6f}"
-                    elif order['stop_price']:
-                        price_info = f" @ {order['stop_price']:.6f}"
+                if data['orphan_type'] == 'classic':
+                    classic_orphans.append(symbol)
+                elif data['orphan_type'] == 'hanging_limits':
+                    hanging_limits.append(symbol)
+            
+            # Показываем висящие лимитки (действительно сиротские)
+            if hanging_limits:
+                print(f"\n🎯 ВИСЯЩИЕ ЛИМИТНЫЕ ОРДЕРА ({len(hanging_limits)}):")
+                print("   (Ордера на открытие без позиций и НЕ под наблюдением)")
+                for symbol in hanging_limits:
+                    data = analysis[symbol]
+                    print(f"\n📊 {symbol}:")
+                    print(f"  • Позиция: ❌ НЕТ")
+                    print(f"  • Лимитных ордеров: {data['entry_orders']}")
+                    print(f"  • Под наблюдением: ❌ НЕТ")
                     
-                    print(f"    - {order_type} {side} {order['quantity']}{price_info} (#{order['order_id']})")
+                    # Детали лимитных ордеров
+                    entry_orders = data['orders_detail']['entry']
+                    for order in entry_orders:
+                        order_type = order['type']
+                        side = order['side']
+                        price_info = f" @ {order['price']:.6f}" if order['price'] else ""
+                        print(f"    - {order_type} {side} {order['quantity']}{price_info} (#{order['order_id']})")
+            
+            # Показываем классические сироты
+            if classic_orphans:
+                print(f"\n🏚️ КЛАССИЧЕСКИЕ СИРОТЫ ({len(classic_orphans)}):")
+                print("   (SL/TP ордера без позиций)")
+                for symbol in classic_orphans:
+                    data = analysis[symbol]
+                    print(f"\n📊 {symbol}:")
+                    print(f"  • Позиция: ❌ НЕТ")
+                    print(f"  • Всего ордеров: {data['total_orders']}")
+                    print(f"  • Ордера на открытие: {data['entry_orders']}")
+                    print(f"  • Ордера на закрытие: {data['exit_orders']}")
+                    
+                    # Детали ордеров на закрытие
+                    exit_orders = data['orders_detail']['exit']
+                    for order in exit_orders:
+                        order_type = order['type']
+                        side = order['side']
+                        price_info = ""
+                        if order['price']:
+                            price_info = f" @ {order['price']:.6f}"
+                        elif order['stop_price']:
+                            price_info = f" @ {order['stop_price']:.6f}"
+                        
+                        print(f"    - {order_type} {side} {order['quantity']}{price_info} (#{order['order_id']})")
+        
+        # Показываем ордера под наблюдением
+        watchdog_symbols = [s for s, data in analysis.items() 
+                           if not data['has_position'] and data['orphan_type'] == 'under_watchdog']
+        
+        if watchdog_symbols:
+            print(f"\n👁️ ОРДЕРА ПОД НАБЛЮДЕНИЕМ WATCHDOG ({len(watchdog_symbols)}):")
+            print("   (Лимитные ордера ожидают исполнения - НЕ сиротские)")
+            print("-" * 60)
+            
+            for symbol in sorted(watchdog_symbols):
+                data = analysis[symbol]
+                entry_count = data['entry_orders']
+                exit_count = data['exit_orders']
+                print(f"• {symbol}: ⏳ Ожидает исполнения, Ордеров: {entry_count + exit_count} (Entry: {entry_count}, Exit: {exit_count})")
         
         # Показываем чистые символы (кратко)
         if clean_symbols:
@@ -278,10 +397,20 @@ class OrdersCleaner:
         
         for symbol in orphaned_symbols:
             data = analysis[symbol]
-            exit_orders = data['orders_detail']['exit']
+            orphan_type = data['orphan_type']
             
-            print(f"\n📊 {symbol} - {len(exit_orders)} сиротских ордеров:")
-            for order in exit_orders:
+            # Получаем ордера для удаления в зависимости от типа
+            if orphan_type == 'classic':
+                orders_to_delete = data['orders_detail']['exit']
+                type_name = "сиротских SL/TP"
+            elif orphan_type == 'hanging_limits':
+                orders_to_delete = data['orders_detail']['entry']  
+                type_name = "висящих лимитных"
+            else:
+                continue
+            
+            print(f"\n📊 {symbol} - {len(orders_to_delete)} {type_name} ордеров:")
+            for order in orders_to_delete:
                 order_type = order['type']
                 side = order['side']
                 price_info = ""
@@ -294,7 +423,7 @@ class OrdersCleaner:
             
             # Запрос подтверждения
             if not auto_confirm:
-                response = input(f"\n🗑️ Удалить {len(exit_orders)} ордеров для {symbol}? (y/n/q): ").lower().strip()
+                response = input(f"\n🗑️ Удалить {len(orders_to_delete)} {type_name} ордеров для {symbol}? (y/n/q): ").lower().strip()
                 
                 if response == 'q':
                     print("❌ Операция прервана пользователем")
@@ -306,15 +435,15 @@ class OrdersCleaner:
             
             # Удаляем ордера
             if dry_run:
-                print(f"🔍 [DRY RUN] Будет удалено {len(exit_orders)} ордеров для {symbol}")
-                cleaned_count += len(exit_orders)
+                print(f"🔍 [DRY RUN] Будет удалено {len(orders_to_delete)} {type_name} ордеров для {symbol}")
+                cleaned_count += len(orders_to_delete)
             else:
-                symbol_errors = self._cancel_orders(symbol, exit_orders)
+                symbol_errors = self._cancel_orders(symbol, orders_to_delete)
                 if symbol_errors:
                     errors.extend(symbol_errors)
                 else:
-                    cleaned_count += len(exit_orders)
-                    print(f"✅ Удалено {len(exit_orders)} ордеров для {symbol}")
+                    cleaned_count += len(orders_to_delete)
+                    print(f"✅ Удалено {len(orders_to_delete)} {type_name} ордеров для {symbol}")
         
         return {
             "cleaned": cleaned_count,
@@ -325,6 +454,11 @@ class OrdersCleaner:
     def _cancel_orders(self, symbol: str, orders: List[Dict]) -> List[str]:
         """Отменяет список ордеров для символа"""
         errors = []
+        
+        if not self.client:
+            error_msg = f"❌ Binance client не доступен для отмены ордеров {symbol}"
+            logger.error(error_msg)
+            return [error_msg]
         
         for order in orders:
             try:

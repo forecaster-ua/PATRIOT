@@ -287,11 +287,56 @@ class OrdersWatchdog:
             processed_requests = []
             for request in requests_data:
                 try:
-                    if request['action'] == 'add_order':
+                    action = request['action']
+                    
+                    if action == 'add_order':
                         if self.add_order_to_watch(request['data']):
                             logger.info(f"📥 Обработан запрос на добавление ордера")
                         else:
                             logger.error(f"❌ Не удалось обработать запрос")
+                    
+                    elif action == 'get_watched_symbols':
+                        # Создаем файл ответа
+                        response_data = self.get_watched_symbols()
+                        response_file = Path('orders_watchdog_response.json')
+                        
+                        with open(response_file, 'w', encoding='utf-8') as f:
+                            json.dump({
+                                'action': 'get_watched_symbols_response',
+                                'timestamp': datetime.now().isoformat(),
+                                'data': response_data
+                            }, f, indent=2, ensure_ascii=False)
+                        
+                        logger.info(f"📤 Отправлен ответ о наблюдаемых символах")
+                    
+                    elif action == 'check_conflicts':
+                        # Проверяем конфликты с предлагаемыми ордерами
+                        proposed_orders = request.get('data', [])
+                        conflict_result = self.check_symbol_conflicts(proposed_orders)
+                        
+                        response_file = Path('orders_watchdog_response.json')
+                        with open(response_file, 'w', encoding='utf-8') as f:
+                            json.dump({
+                                'action': 'check_conflicts_response',
+                                'timestamp': datetime.now().isoformat(),
+                                'data': conflict_result
+                            }, f, indent=2, ensure_ascii=False)
+                        
+                        logger.info(f"📤 Отправлен результат проверки конфликтов")
+                    
+                    elif action == 'get_status':
+                        # Возвращаем статус watchdog
+                        status_data = self.get_status()
+                        response_file = Path('orders_watchdog_response.json')
+                        
+                        with open(response_file, 'w', encoding='utf-8') as f:
+                            json.dump({
+                                'action': 'get_status_response',
+                                'timestamp': datetime.now().isoformat(),
+                                'data': status_data
+                            }, f, indent=2, ensure_ascii=False)
+                        
+                        logger.info(f"📤 Отправлен статус watchdog")
                     
                     processed_requests.append(request)
                     
@@ -1261,6 +1306,108 @@ class OrdersWatchdog:
                 'orders': [order.to_dict() for order in self.watched_orders.values()],
                 'is_running': not self.stop_event.is_set(),
                 'client_connected': self.client is not None
+            }
+    
+    def get_watched_symbols(self) -> Dict[str, Dict[str, Any]]:
+        """Возвращает символы под наблюдением для синхронизации с ticker_monitor"""
+        with self.lock:
+            symbols_info = {}
+            
+            for order_id, order in self.watched_orders.items():
+                symbol = order.symbol
+                
+                if symbol not in symbols_info:
+                    symbols_info[symbol] = {
+                        'symbol': symbol,
+                        'orders': [],
+                        'position_side': order.position_side,
+                        'has_sl': False,
+                        'has_tp': False,
+                        'main_order_filled': False
+                    }
+                
+                # Добавляем информацию об ордере
+                order_info = {
+                    'order_id': order.order_id,
+                    'side': order.side,
+                    'quantity': order.quantity,
+                    'price': order.price,
+                    'status': order.status.value,
+                    'order_type': 'MAIN' if order.sl_order_id is None and order.tp_order_id is None else 'SL_TP'
+                }
+                
+                symbols_info[symbol]['orders'].append(order_info)
+                
+                # Отмечаем типы ордеров
+                if order.sl_order_id:
+                    symbols_info[symbol]['has_sl'] = True
+                if order.tp_order_id:
+                    symbols_info[symbol]['has_tp'] = True
+                if order.status.value in ['FILLED', 'PARTIALLY_FILLED']:
+                    symbols_info[symbol]['main_order_filled'] = True
+            
+            return symbols_info
+    
+    def check_symbol_conflicts(self, proposed_orders: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        Проверяет конфликты с предлагаемыми к размещению ордерами
+        
+        Args:
+            proposed_orders: Список словарей с ключами: symbol, side, quantity, order_type
+        
+        Returns:
+            Dict с информацией о конфликтах и рекомендациями
+        """
+        with self.lock:
+            conflicts = []
+            recommendations = []
+            watched_symbols = self.get_watched_symbols()
+            
+            for proposed in proposed_orders:
+                symbol = proposed['symbol']
+                proposed_side = proposed['side']
+                proposed_type = proposed.get('order_type', 'MAIN')
+                
+                if symbol in watched_symbols:
+                    watched_info = watched_symbols[symbol]
+                    
+                    # Проверяем конфликты
+                    conflict_info = {
+                        'symbol': symbol,
+                        'proposed_side': proposed_side,
+                        'proposed_type': proposed_type,
+                        'existing_orders': len(watched_info['orders']),
+                        'existing_position_side': watched_info['position_side'],
+                        'has_filled_order': watched_info['main_order_filled'],
+                        'conflict_type': None,
+                        'severity': 'INFO'
+                    }
+                    
+                    # Анализируем тип конфликта
+                    if watched_info['main_order_filled']:
+                        # Есть открытая позиция
+                        if proposed_side != watched_info['position_side']:
+                            conflict_info['conflict_type'] = 'OPPOSITE_DIRECTION'
+                            conflict_info['severity'] = 'ERROR'
+                            recommendations.append(f"❌ {symbol}: Попытка открыть {proposed_side} при существующей позиции {watched_info['position_side']}")
+                        else:
+                            conflict_info['conflict_type'] = 'SAME_DIRECTION'
+                            conflict_info['severity'] = 'WARNING'
+                            recommendations.append(f"⚠️ {symbol}: Дублирование позиции в том же направлении {proposed_side}")
+                    else:
+                        # Есть pending ордера
+                        conflict_info['conflict_type'] = 'PENDING_ORDERS'
+                        conflict_info['severity'] = 'WARNING'
+                        recommendations.append(f"⚠️ {symbol}: Есть {len(watched_info['orders'])} ордеров в обработке")
+                    
+                    conflicts.append(conflict_info)
+            
+            return {
+                'timestamp': datetime.now().isoformat(),
+                'total_conflicts': len(conflicts),
+                'conflicts': conflicts,
+                'recommendations': recommendations,
+                'safe_to_proceed': len([c for c in conflicts if c['severity'] == 'ERROR']) == 0
             }
     
     def check_exchange_sync(self) -> Dict[str, Any]:

@@ -110,7 +110,7 @@ if not BINANCE_API_KEY or not BINANCE_API_SECRET:
 # Настройки торговли фьючерсами
 RISK_PERCENT = float(os.getenv("RISK_PERCENT", "2.0"))  # Процент от капитала на сделку (по умолчанию 2%)
 FUTURES_LEVERAGE = int(os.getenv("FUTURES_LEVERAGE", "30"))  # Плечо для фьючерсов (по умолчанию 30x)
-FUTURES_MARGIN_TYPE = os.getenv("FUTURES_MARGIN_TYPE", "CROSSED")  # Режим маржи: CROSS или ISOLATED (по умолчанию CROSS)
+FUTURES_MARGIN_TYPE = os.getenv("FUTURES_MARGIN_TYPE", "CROSS")  # Режим маржи: CROSS или ISOLATED (по умолчанию CROSS)
 PRICE_TOLERANCE_PERCENT = float(os.getenv("PRICE_TOLERANCE_PERCENT", "1.0"))  # 1% допустимое отклонение цены
 
 # 🔧 Настройки управления позициями

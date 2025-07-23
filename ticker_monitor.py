@@ -38,6 +38,8 @@ try:
     from order_executor import execute_trading_signal
     from utils import logger
     from config import TIMEFRAMES
+    from orders_synchronizer import orders_sync, validate_signal_before_execution
+    from state_recovery import state_recovery, recover_system_state, is_symbol_available_for_trading
     logger.info("✅ Successfully imported project modules")
 except ImportError as e:
     # Если импорт не удался, создаем базовый logger
@@ -53,6 +55,42 @@ except ImportError as e:
     
     # Mock реализации для автономной работы
     import random
+    
+    # Mock синхронизатор
+    class MockOrdersSync:
+        def validate_new_signal(self, symbol, side, quantity):
+            return True, "Mock validation"
+        def get_synchronization_report(self):
+            return {'watchdog_running': False, 'mock': True}
+        def print_sync_report(self, report=None):
+            print("🔄 Mock sync report - Orders Watchdog недоступен")
+    
+    orders_sync = MockOrdersSync()
+    
+    def validate_signal_before_execution(symbol, side, quantity):
+        """Mock validation function"""
+        return True, "Mock validation"
+    
+    def is_symbol_available_for_trading(symbol):
+        """Mock availability check"""
+        return True, "Mock - always available"
+    
+    def recover_system_state():
+        """Mock state recovery"""
+        from datetime import datetime
+        
+        class MockSystemState:
+            def __init__(self):
+                self.timestamp = datetime.now()
+                self.active_positions = {}
+                self.watchdog_orders = {}
+                self.exchange_positions = {}
+                self.exchange_orders = {}
+                self.synchronization_issues = []
+                self.recovery_actions = ["Mock state recovery"]
+                self.is_synchronized = False
+        
+        return MockSystemState()
     
     class MockSignalAnalyzer:
         def __init__(self, ticker: str):
@@ -259,7 +297,51 @@ class TickerMonitor:
         # Настройка обработчиков сигналов
         self._setup_signal_handlers()
         
+        # Проверка синхронизации с Orders Watchdog
+        self._check_initial_synchronization()
+        
         logger.info(f"🎼 TickerMonitor initialized: {len(self.tickers)} tickers, {self.max_workers} workers, {self.ticker_delay}s delay")
+    
+    def _check_initial_synchronization(self) -> None:
+        """Проверяет синхронизацию с Orders Watchdog при запуске"""
+        try:
+            logger.info("🔄 Проверка синхронизации с Orders Watchdog...")
+            
+            # Получаем отчет синхронизации
+            sync_report = orders_sync.get_synchronization_report()
+            
+            if sync_report.get('watchdog_running', False):
+                watched_symbols = sync_report.get('watched_symbols', {})
+                watched_count = len(watched_symbols) if isinstance(watched_symbols, dict) else 0
+                total_orders = sync_report.get('total_watched_orders', 0)
+                
+                logger.info(f"✅ Orders Watchdog активен: {watched_count} символов, {total_orders} ордеров под наблюдением")
+                
+                # Проверяем наличие проблем
+                issues = sync_report.get('synchronization_issues', [])
+                if isinstance(issues, list) and issues:
+                    logger.warning(f"⚠️ Обнаружено {len(issues)} проблем синхронизации:")
+                    for issue in issues:
+                        logger.warning(f"  {issue}")
+                
+                # Выводим детали по символам если их не много
+                if isinstance(watched_symbols, dict) and watched_count > 0 and watched_count <= 10:
+                    logger.info("📋 Символы под наблюдением:")
+                    for symbol, info in watched_symbols.items():
+                        if isinstance(info, dict):
+                            status = "ПОЗИЦИЯ" if info.get('main_order_filled') else "ОРДЕРА"
+                            side = info.get('position_side', 'UNKNOWN')
+                            orders_list = info.get('orders', [])
+                            orders_count = len(orders_list) if isinstance(orders_list, list) else 0
+                            logger.info(f"  • {symbol}: {status} {side} ({orders_count} ордеров)")
+                
+            else:
+                logger.warning("⚠️ Orders Watchdog недоступен - синхронизация ограничена")
+                logger.warning("⚠️ Рекомендуется запустить Orders Watchdog для полной функциональности")
+            
+        except Exception as e:
+            logger.error(f"❌ Ошибка проверки синхронизации: {e}")
+            logger.warning("⚠️ Продолжаем работу без синхронизации")
     
     def _setup_signal_handlers(self) -> None:
         """Настройка graceful shutdown"""
@@ -331,6 +413,13 @@ class TickerMonitor:
                     logger.info(f"🔍 [{worker_id}] Progress: {processed_count} processed, {remaining} remaining")
                 
                 try:
+                    # 🔒 ПРОВЕРКА ДОСТУПНОСТИ СИМВОЛА
+                    is_available, availability_reason = is_symbol_available_for_trading(ticker)
+                    if not is_available:
+                        logger.warning(f"🚫 {ticker} blocked for trading: {availability_reason}")
+                        self.stats.update(processed=1)
+                        continue
+                    
                     # 1. Анализируем сигналы через SignalAnalyzer
                     analyzer = SignalAnalyzer(ticker)
                     signal_data = analyzer.analyze_ticker(self.stop_event)
@@ -507,6 +596,34 @@ class TickerMonitor:
         logger.info("🎼 Ticker Monitor Orchestra started!")
         
         try:
+            # 🔄 ВОССТАНОВЛЕНИЕ СОСТОЯНИЯ СИСТЕМЫ
+            logger.info("🔄 Starting system state recovery...")
+            try:
+                system_state = recover_system_state()
+                
+                if system_state.is_synchronized:
+                    logger.info("✅ System state is synchronized")
+                else:
+                    logger.warning("⚠️ System synchronization issues detected")
+                    for issue in system_state.synchronization_issues:
+                        logger.warning(f"   • {issue}")
+                    
+                    logger.info("🔧 Recovery actions taken:")
+                    for action in system_state.recovery_actions:
+                        logger.info(f"   • {action}")
+                
+                # Проверяем активные позиции
+                if system_state.active_positions:
+                    logger.info(f"📊 Found {len(system_state.active_positions)} active positions:")
+                    for symbol, position in system_state.active_positions.items():
+                        logger.info(f"   • {symbol}: {position.side} {position.size}")
+                else:
+                    logger.info("📊 No active positions found")
+                    
+            except Exception as e:
+                logger.error(f"❌ State recovery failed: {e}")
+                logger.warning("⚠️ Continuing with limited functionality...")
+            
             # Запускаем первичную обработку для проверки системы
             logger.info("🎬 Running initial processing...")
             self.process_tickers()

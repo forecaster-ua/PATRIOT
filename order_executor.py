@@ -31,6 +31,18 @@ from telegram_bot import telegram_bot
 from symbol_cache import get_symbol_cache, round_price_for_symbol, round_quantity_for_symbol
 from config import BINANCE_API_KEY, BINANCE_API_SECRET, BINANCE_TESTNET, MULTIPLE_ORDERS, MAX_CONCURRENT_ORDERS, RISK_PERCENT, FUTURES_LEVERAGE, FUTURES_MARGIN_TYPE
 
+# Синхронизация заказов
+try:
+    from orders_synchronizer import validate_signal_before_execution
+    SYNC_AVAILABLE = True
+    logger.info("✅ Orders Synchronizer подключен")
+except ImportError:
+    logger.warning("⚠️ Orders Synchronizer недоступен")
+    SYNC_AVAILABLE = False
+    def validate_signal_before_execution(symbol, side, quantity):
+        """Mock validation when synchronizer is not available"""
+        return True, "Synchronizer недоступен"
+
 # Binance
 from binance.client import Client
 from binance.exceptions import BinanceAPIException
@@ -315,7 +327,26 @@ class OrderExecutor:
         take_profit = float(signal_data['take_profit'])
         
         try:
-            # 🔧 НОВАЯ ПРОВЕРКА: Проверяем открытые позиции
+            # � ВАЛИДАЦИЯ СИНХРОНИЗАЦИИ: Проверяем конфликты с Orders Watchdog
+            if SYNC_AVAILABLE:
+                side = "BUY" if signal_type == "LONG" else "SELL"
+                quantity = 100.0  # Временное значение для валидации
+                
+                is_valid, validation_reason = validate_signal_before_execution(ticker, side, quantity)
+                
+                if not is_valid:
+                    logger.warning(f"⚠️ Сигнал {ticker} отклонен синхронизатором: {validation_reason}")
+                    self._send_synchronization_conflict_notification(ticker, signal_data, validation_reason)
+                    return {
+                        'success': False,
+                        'error': f'Конфликт синхронизации: {validation_reason}',
+                        'signal_data': signal_data,
+                        'sync_validation': {'valid': False, 'reason': validation_reason}
+                    }
+                else:
+                    logger.info(f"✅ Сигнал {ticker} прошел валидацию синхронизации: {validation_reason}")
+            
+            # �🔧 НОВАЯ ПРОВЕРКА: Проверяем открытые позиции
             has_position, position_info = self.check_open_position(ticker)
             
             if has_position:
@@ -707,6 +738,38 @@ class OrderExecutor:
             
         except Exception as e:
             logger.error(f"❌ Ошибка отправки уведомления о лимите: {e}")
+    
+    def _send_synchronization_conflict_notification(self, ticker: str, signal_data: Dict, validation_reason: str) -> None:
+        """Уведомление о конфликте синхронизации"""
+        try:
+            signal_type = signal_data.get('signal', 'N/A')
+            entry_price = signal_data.get('entry_price', 0)
+            timeframe = signal_data.get('timeframe', 'N/A')
+            
+            message = f"""
+🔄 <b>КОНФЛИКТ СИНХРОНИЗАЦИИ</b> 🔄
+
+📊 <b>Символ:</b> {ticker}
+🎯 <b>Сигнал (отклонен):</b> {signal_type}
+💵 <b>Цена сигнала:</b> {entry_price}
+⌚ <b>Таймфрейм:</b> {timeframe}
+
+⚠️ <b>Причина отклонения:</b>
+{validation_reason}
+
+🐕 <b>Orders Watchdog обнаружил конфликт</b>
+❌ <b>Новый ордер НЕ размещен для безопасности</b>
+
+💡 <b>Рекомендация:</b> Проверьте состояние существующих ордеров и позиций
+
+⏰ {datetime.now().strftime('%H:%M:%S')}
+"""
+            
+            telegram_bot.send_message(message)
+            logger.info(f"📱 Уведомление о конфликте синхронизации для {ticker} отправлено")
+            
+        except Exception as e:
+            logger.error(f"❌ Ошибка отправки уведомления о конфликте синхронизации: {e}")
 
 
 class OrderLifecycleManager:
