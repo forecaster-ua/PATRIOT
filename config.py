@@ -70,7 +70,7 @@ LOGGING_CONFIG = {
 }
 
 # --- API Configuration ---
-API_BASE_URL = "https://e03ce68d341d.ngrok-free.app/" # Base URL for the API
+API_BASE_URL = "https://5ca35593a63d.ngrok-free.app/" # Base URL for the API
 API_ENDPOINT = "/signal"
 API_KEY = os.getenv("API_KEY", "my_secret_9876_maxa")  # Prefer environment variable
 API_TIMEOUT = 10  # seconds

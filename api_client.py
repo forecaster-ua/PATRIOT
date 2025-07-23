@@ -18,7 +18,7 @@ class APIClient:
     """Handles all API communications with signal provider"""
     
     def __init__(self):
-        self.base_url = "https://e03ce68d341d.ngrok-free.app/"  # Base URL for the API
+        self.base_url = "https://5ca35593a63d.ngrok-free.app/"  # Base URL for the API
         self.session = requests.Session()
         self.session.headers.update({
             "Authorization": "Bearer my_secret_9876_maxa",

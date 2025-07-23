@@ -493,10 +493,20 @@ class OrdersWatchdog:
             if (sl_filled or tp_filled) and filled_order_info:
                 self._handle_sl_tp_filled(order, filled_order_info, is_stop_loss=sl_filled)
             
+            # Если оба ордера отменены - проверяем позицию и удаляем из отслеживания
+            elif sl_cancelled and tp_cancelled:
+                logger.warning(f"⚠️ Оба ордера (SL/TP) отменены для {order.symbol} - проверяем позицию")
+                self._handle_both_orders_cancelled(order)
+            
             # Если SL отменен, но есть активный TP - пытаемся восстановить SL
             elif sl_cancelled and not tp_filled and not tp_cancelled:
                 logger.warning(f"⚠️ SL отменен для {order.symbol}, но TP активен - требуется восстановление SL")
                 self._handle_cancelled_sl_order(order)
+            
+            # Если TP отменен, но есть активный SL - пытаемся восстановить TP
+            elif tp_cancelled and not sl_filled and not sl_cancelled:
+                logger.warning(f"⚠️ TP отменен для {order.symbol}, но SL активен - требуется восстановление TP")
+                self._handle_cancelled_tp_order(order)
                 
         except Exception as e:
             logger.error(f"❌ Ошибка проверки SL/TP ордеров для {order.order_id}: {e}")
@@ -598,6 +608,140 @@ class OrdersWatchdog:
                 
         except Exception as e:
             logger.error(f"❌ Ошибка обработки отмененного SL: {e}")
+    
+    def _handle_both_orders_cancelled(self, order: WatchedOrder) -> None:
+        """Обрабатывает случай когда оба ордера (SL/TP) отменены"""
+        if not self.client:
+            return
+            
+        try:
+            logger.warning(f"🔧 Оба ордера отменены для {order.symbol} - проверяем позицию...")
+            
+            # Проверяем, что позиция еще открыта
+            positions = self.client.futures_position_information(symbol=order.symbol)
+            position_open = False
+            for pos in positions:
+                if pos['positionSide'] == order.position_side and float(pos['positionAmt']) != 0:
+                    position_open = True
+                    break
+            
+            if not position_open:
+                logger.info(f"📍 Позиция {order.symbol} закрыта, удаляем из отслеживания")
+                # Удаляем из отслеживания
+                self.remove_order_from_watch(order.order_id)
+                self._send_position_closed_externally_notification(order)
+                return
+            
+            # Позиция все еще открыта - пытаемся восстановить SL/TP
+            if order.sl_tp_attempts < 3:
+                logger.info(f"🛡️ Восстанавливаем SL/TP для {order.symbol} (попытка {order.sl_tp_attempts + 1}/3)")
+                
+                # Увеличиваем счетчик попыток
+                with self.lock:
+                    order.sl_tp_attempts += 1
+                    self._save_persistent_state()
+                
+                # Пытаемся разместить новые SL/TP
+                sl_success, new_sl_order_id = self._place_stop_loss(order)
+                tp_success, new_tp_order_id = self._place_take_profit(order)
+                
+                if sl_success and tp_success and new_sl_order_id and new_tp_order_id:
+                    # Обновляем ID ордеров
+                    with self.lock:
+                        order.sl_order_id = new_sl_order_id
+                        order.tp_order_id = new_tp_order_id
+                        self._save_persistent_state()
+                    
+                    logger.info(f"✅ SL/TP восстановлены для {order.symbol}: SL={new_sl_order_id}, TP={new_tp_order_id}")
+                    self._send_sl_tp_restored_notification(order, new_sl_order_id, new_tp_order_id)
+                else:
+                    logger.error(f"❌ Не удалось восстановить SL/TP для {order.symbol}")
+                    # Помечаем как ошибку
+                    with self.lock:
+                        order.status = OrderStatus.SL_TP_ERROR
+                        self._save_persistent_state()
+                    self._send_sl_tp_error_notification(order)
+            else:
+                logger.error(f"❌ Максимум попыток восстановления SL/TP для {order.symbol} исчерпан")
+                with self.lock:
+                    order.status = OrderStatus.SL_TP_ERROR
+                    self._save_persistent_state()
+                self._send_sl_tp_error_notification(order)
+                
+        except Exception as e:
+            logger.error(f"❌ Ошибка обработки отмененных SL/TP: {e}")
+    
+    def _handle_cancelled_tp_order(self, order: WatchedOrder) -> None:
+        """Обрабатывает отмененный TP ордер - пытается восстановить"""
+        if not self.client:
+            return
+            
+        try:
+            logger.warning(f"🔧 Попытка восстановления TP для {order.symbol}...")
+            
+            # Проверяем, что позиция еще открыта
+            positions = self.client.futures_position_information(symbol=order.symbol)
+            position_open = False
+            for pos in positions:
+                if pos['positionSide'] == order.position_side and float(pos['positionAmt']) != 0:
+                    position_open = True
+                    break
+            
+            if not position_open:
+                logger.info(f"📍 Позиция {order.symbol} закрыта, удаляем из отслеживания")
+                # Отменяем SL ордер если он еще активен
+                if order.sl_order_id:
+                    try:
+                        self.client.futures_cancel_order(
+                            symbol=order.symbol,
+                            orderId=order.sl_order_id
+                        )
+                        logger.info(f"🚫 SL ордер {order.sl_order_id} отменен")
+                    except Exception as e:
+                        logger.warning(f"⚠️ Не удалось отменить SL: {e}")
+                
+                # Удаляем из отслеживания
+                self.remove_order_from_watch(order.order_id)
+                self._send_position_closed_externally_notification(order)
+                return
+            
+            # Позиция открыта - пытаемся восстановить TP
+            if order.sl_tp_attempts < 3:
+                logger.info(f"🎯 Восстанавливаем TP для {order.symbol} (попытка {order.sl_tp_attempts + 1}/3)")
+                
+                # Увеличиваем счетчик попыток
+                with self.lock:
+                    order.sl_tp_attempts += 1
+                    self._save_persistent_state()
+                
+                # Пытаемся разместить новый TP
+                tp_success, new_tp_order_id = self._place_take_profit(order)
+                
+                if tp_success and new_tp_order_id:
+                    # Обновляем ID TP ордера
+                    with self.lock:
+                        order.tp_order_id = new_tp_order_id
+                        self._save_persistent_state()
+                    
+                    logger.info(f"✅ TP восстановлен для {order.symbol}: {new_tp_order_id}")
+                    self._send_tp_restored_notification(order, new_tp_order_id)
+                else:
+                    logger.error(f"❌ Не удалось восстановить TP для {order.symbol}")
+                    if order.sl_tp_attempts >= 3:
+                        # Максимум попыток исчерпан - помечаем как ошибку
+                        with self.lock:
+                            order.status = OrderStatus.SL_TP_ERROR
+                            self._save_persistent_state()
+                        self._send_tp_restore_failed_notification(order)
+            else:
+                logger.error(f"❌ Максимум попыток восстановления TP для {order.symbol} исчерпан")
+                with self.lock:
+                    order.status = OrderStatus.SL_TP_ERROR
+                    self._save_persistent_state()
+                self._send_tp_restore_failed_notification(order)
+                
+        except Exception as e:
+            logger.error(f"❌ Ошибка обработки отмененного TP: {e}")
     
     def _calculate_pnl(self, order: WatchedOrder, filled_order_info: Dict[str, Any], is_stop_loss: bool) -> float:
         """Рассчитывает прибыль/убыток в USDT с учетом плеча"""
@@ -939,6 +1083,76 @@ class OrdersWatchdog:
             
         except Exception as e:
             logger.error(f"❌ Ошибка отправки уведомления о проблеме SL: {e}")
+    
+    def _send_sl_tp_restored_notification(self, order: WatchedOrder, sl_order_id: str, tp_order_id: str) -> None:
+        """Уведомление о восстановлении SL/TP ордеров"""
+        try:
+            message = f"""
+🔧 <b>SL/TP ОРДЕРА ВОССТАНОВЛЕНЫ</b> 🔧
+
+📊 <b>Символ:</b> {order.symbol}
+📈 <b>Направление:</b> {order.signal_type}
+💰 <b>Объем:</b> {order.quantity}
+
+🛡️ <b>Новый SL:</b> {order.stop_loss:.6f} (#{sl_order_id[-6:]})
+🎯 <b>Новый TP:</b> {order.take_profit:.6f} (#{tp_order_id[-6:]})
+
+✅ <b>Защита полностью восстановлена!</b>
+
+⏰ {datetime.now().strftime('%H:%M:%S')}
+"""
+            telegram_bot.send_message(message)
+            logger.info(f"📱 Уведомление о восстановлении SL/TP для {order.symbol}")
+            
+        except Exception as e:
+            logger.error(f"❌ Ошибка отправки уведомления о восстановлении SL/TP: {e}")
+    
+    def _send_tp_restored_notification(self, order: WatchedOrder, new_tp_order_id: str) -> None:
+        """Уведомление о восстановлении TP ордера"""
+        try:
+            message = f"""
+🔧 <b>TP ОРДЕР ВОССТАНОВЛЕН</b> 🔧
+
+📊 <b>Символ:</b> {order.symbol}
+📈 <b>Направление:</b> {order.signal_type}
+💰 <b>Объем:</b> {order.quantity}
+
+🎯 <b>Новый TP:</b> {order.take_profit:.6f} (#{new_tp_order_id[-6:]})
+🛡️ <b>SL активен:</b> {order.stop_loss:.6f} (#{order.sl_order_id[-6:] if order.sl_order_id else 'N/A'})
+
+✅ <b>TP восстановлен!</b>
+
+⏰ {datetime.now().strftime('%H:%M:%S')}
+"""
+            telegram_bot.send_message(message)
+            logger.info(f"📱 Уведомление о восстановлении TP для {order.symbol}")
+            
+        except Exception as e:
+            logger.error(f"❌ Ошибка отправки уведомления о восстановлении TP: {e}")
+    
+    def _send_tp_restore_failed_notification(self, order: WatchedOrder) -> None:
+        """Уведомление о неудачном восстановлении TP"""
+        try:
+            message = f"""
+🚨 <b>НЕ УДАЛОСЬ ВОССТАНОВИТЬ TP!</b> 🚨
+
+📊 <b>Символ:</b> {order.symbol}
+📈 <b>Направление:</b> {order.signal_type}
+💰 <b>Объем:</b> {order.quantity}
+
+❌ <b>TP ордер отменился и не восстанавливается</b>
+🛡️ <b>SL все еще активен:</b> {order.stop_loss:.6f}
+
+⚠️ <b>ПОЗИЦИЯ БЕЗ ТЕЙК-ПРОФИТА!</b>
+🛠️ <b>Требуется ручная установка TP</b>
+
+⏰ {datetime.now().strftime('%H:%M:%S')}
+"""
+            telegram_bot.send_message(message)
+            logger.warning(f"📱 Уведомление о проблеме с TP для {order.symbol}")
+            
+        except Exception as e:
+            logger.error(f"❌ Ошибка отправки уведомления о проблеме TP: {e}")
     
     def check_positions_status(self) -> None:
         """Проверяет открытые позиции и удаляет связанные ордера если позиция закрыта"""
