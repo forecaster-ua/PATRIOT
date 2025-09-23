@@ -1,16 +1,5 @@
 [
   {
-    "timestamp": "2025-07-30T20:08:42.827880",
-    "total_checked": 9,
-    "actions_taken": 0,
-    "successful_actions": 0,
-    "failed_actions": 0,
-    "is_synchronized": true,
-    "actions": [],
-    "warnings": [],
-    "errors": []
-  },
-  {
     "timestamp": "2025-07-30T20:16:01.390113",
     "total_checked": 9,
     "actions_taken": 0,
@@ -24827,6 +24816,528 @@
           "status": "MISSING"
         },
         "timestamp": "2025-09-22 23:21:06.151150"
+      }
+    ],
+    "warnings": [],
+    "errors": []
+  },
+  {
+    "timestamp": "2025-09-23T15:32:33.736648",
+    "total_checked": 51,
+    "actions_taken": 51,
+    "successful_actions": 51,
+    "failed_actions": 0,
+    "is_synchronized": true,
+    "actions": [
+      {
+        "action_type": "remove_order",
+        "symbol": "POLUSDT",
+        "order_id": "2600230880",
+        "description": "UNKNOWN ордер исчез с биржи (причина неизвестна)",
+        "details": {
+          "status": "MISSING"
+        },
+        "timestamp": "2025-09-23 15:32:34.535541"
+      },
+      {
+        "action_type": "remove_order",
+        "symbol": "BCHUSDT",
+        "order_id": "34790276982",
+        "description": "UNKNOWN ордер исчез с биржи (причина неизвестна)",
+        "details": {
+          "status": "MISSING"
+        },
+        "timestamp": "2025-09-23 15:32:34.796327"
+      },
+      {
+        "action_type": "remove_order",
+        "symbol": "FLMUSDT",
+        "order_id": "8595633655",
+        "description": "UNKNOWN ордер исчез с биржи (причина неизвестна)",
+        "details": {
+          "status": "MISSING"
+        },
+        "timestamp": "2025-09-23 15:32:35.056384"
+      },
+      {
+        "action_type": "remove_order",
+        "symbol": "SEIUSDT",
+        "order_id": "7146042092",
+        "description": "UNKNOWN ордер исчез с биржи (причина неизвестна)",
+        "details": {
+          "status": "MISSING"
+        },
+        "timestamp": "2025-09-23 15:32:35.316919"
+      },
+      {
+        "action_type": "remove_order",
+        "symbol": "QTUMUSDT",
+        "order_id": "8687003206",
+        "description": "UNKNOWN ордер исчез с биржи (причина неизвестна)",
+        "details": {
+          "status": "MISSING"
+        },
+        "timestamp": "2025-09-23 15:32:35.613256"
+      },
+      {
+        "action_type": "remove_order",
+        "symbol": "SOLUSDT",
+        "order_id": "132652587552",
+        "description": "UNKNOWN ордер исчез с биржи (причина неизвестна)",
+        "details": {
+          "status": "MISSING"
+        },
+        "timestamp": "2025-09-23 15:32:35.873633"
+      },
+      {
+        "action_type": "remove_order",
+        "symbol": "ICPUSDT",
+        "order_id": "5343970654",
+        "description": "UNKNOWN ордер исчез с биржи (причина неизвестна)",
+        "details": {
+          "status": "MISSING"
+        },
+        "timestamp": "2025-09-23 15:32:36.135783"
+      },
+      {
+        "action_type": "remove_order",
+        "symbol": "BCHUSDT",
+        "order_id": "34910004184",
+        "description": "UNKNOWN ордер исчез с биржи (причина неизвестна)",
+        "details": {
+          "status": "MISSING"
+        },
+        "timestamp": "2025-09-23 15:32:36.395477"
+      },
+      {
+        "action_type": "remove_order",
+        "symbol": "XRPUSDT",
+        "order_id": "114667155472",
+        "description": "UNKNOWN ордер исчез с биржи (причина неизвестна)",
+        "details": {
+          "status": "MISSING"
+        },
+        "timestamp": "2025-09-23 15:32:36.654050"
+      },
+      {
+        "action_type": "remove_order",
+        "symbol": "LINKUSDT",
+        "order_id": "42214846159",
+        "description": "UNKNOWN ордер исчез с биржи (причина неизвестна)",
+        "details": {
+          "status": "MISSING"
+        },
+        "timestamp": "2025-09-23 15:32:36.913254"
+      },
+      {
+        "action_type": "remove_order",
+        "symbol": "ADAUSDT",
+        "order_id": "56637948103",
+        "description": "UNKNOWN ордер исчез с биржи (причина неизвестна)",
+        "details": {
+          "status": "MISSING"
+        },
+        "timestamp": "2025-09-23 15:32:37.174193"
+      },
+      {
+        "action_type": "remove_order",
+        "symbol": "HBARUSDT",
+        "order_id": "12359586278",
+        "description": "UNKNOWN ордер исчез с биржи (причина неизвестна)",
+        "details": {
+          "status": "MISSING"
+        },
+        "timestamp": "2025-09-23 15:32:37.442961"
+      },
+      {
+        "action_type": "remove_order",
+        "symbol": "CRVUSDT",
+        "order_id": "43074489777",
+        "description": "UNKNOWN ордер исчез с биржи (причина неизвестна)",
+        "details": {
+          "status": "MISSING"
+        },
+        "timestamp": "2025-09-23 15:32:37.702622"
+      },
+      {
+        "action_type": "remove_order",
+        "symbol": "NKNUSDT",
+        "order_id": "4624183938",
+        "description": "UNKNOWN ордер исчез с биржи (причина неизвестна)",
+        "details": {
+          "status": "MISSING"
+        },
+        "timestamp": "2025-09-23 15:32:37.963483"
+      },
+      {
+        "action_type": "remove_order",
+        "symbol": "SOLUSDT",
+        "order_id": "133495581520",
+        "description": "UNKNOWN ордер исчез с биржи (причина неизвестна)",
+        "details": {
+          "status": "MISSING"
+        },
+        "timestamp": "2025-09-23 15:32:38.233375"
+      },
+      {
+        "action_type": "remove_order",
+        "symbol": "WIFUSDT",
+        "order_id": "19606327950",
+        "description": "UNKNOWN ордер исчез с биржи (причина неизвестна)",
+        "details": {
+          "status": "MISSING"
+        },
+        "timestamp": "2025-09-23 15:32:38.496645"
+      },
+      {
+        "action_type": "remove_order",
+        "symbol": "JUPUSDT",
+        "order_id": "6059503184",
+        "description": "UNKNOWN ордер исчез с биржи (причина неизвестна)",
+        "details": {
+          "status": "MISSING"
+        },
+        "timestamp": "2025-09-23 15:32:38.756725"
+      },
+      {
+        "action_type": "remove_order",
+        "symbol": "BTCUSDT",
+        "order_id": "750260127992",
+        "description": "UNKNOWN ордер исчез с биржи (причина неизвестна)",
+        "details": {
+          "status": "MISSING"
+        },
+        "timestamp": "2025-09-23 15:32:39.015715"
+      },
+      {
+        "action_type": "remove_order",
+        "symbol": "BCHUSDT",
+        "order_id": "35074205144",
+        "description": "UNKNOWN ордер исчез с биржи (причина неизвестна)",
+        "details": {
+          "status": "MISSING"
+        },
+        "timestamp": "2025-09-23 15:32:39.278019"
+      },
+      {
+        "action_type": "remove_order",
+        "symbol": "CRVUSDT",
+        "order_id": "43192150715",
+        "description": "UNKNOWN ордер исчез с биржи (причина неизвестна)",
+        "details": {
+          "status": "MISSING"
+        },
+        "timestamp": "2025-09-23 15:32:39.537879"
+      },
+      {
+        "action_type": "remove_order",
+        "symbol": "NKNUSDT",
+        "order_id": "4631231687",
+        "description": "UNKNOWN ордер исчез с биржи (причина неизвестна)",
+        "details": {
+          "status": "MISSING"
+        },
+        "timestamp": "2025-09-23 15:32:39.798506"
+      },
+      {
+        "action_type": "remove_order",
+        "symbol": "ETHUSDT",
+        "order_id": "8389765937443396603",
+        "description": "UNKNOWN ордер исчез с биржи (причина неизвестна)",
+        "details": {
+          "status": "MISSING"
+        },
+        "timestamp": "2025-09-23 15:32:40.058622"
+      },
+      {
+        "action_type": "remove_order",
+        "symbol": "ETHUSDT",
+        "order_id": "8389765941101195205",
+        "description": "UNKNOWN ордер исчез с биржи (причина неизвестна)",
+        "details": {
+          "status": "MISSING"
+        },
+        "timestamp": "2025-09-23 15:32:40.320779"
+      },
+      {
+        "action_type": "remove_order",
+        "symbol": "XLMUSDT",
+        "order_id": "19034372380",
+        "description": "UNKNOWN ордер исчез с биржи (причина неизвестна)",
+        "details": {
+          "status": "MISSING"
+        },
+        "timestamp": "2025-09-23 15:32:40.584732"
+      },
+      {
+        "action_type": "remove_order",
+        "symbol": "XTZUSDT",
+        "order_id": "12187523437",
+        "description": "UNKNOWN ордер исчез с биржи (причина неизвестна)",
+        "details": {
+          "status": "MISSING"
+        },
+        "timestamp": "2025-09-23 15:32:40.856453"
+      },
+      {
+        "action_type": "remove_order",
+        "symbol": "BNBUSDT",
+        "order_id": "74483954471",
+        "description": "UNKNOWN ордер исчез с биржи (причина неизвестна)",
+        "details": {
+          "status": "MISSING"
+        },
+        "timestamp": "2025-09-23 15:32:41.120678"
+      },
+      {
+        "action_type": "remove_order",
+        "symbol": "ALGOUSDT",
+        "order_id": "13710371895",
+        "description": "UNKNOWN ордер исчез с биржи (причина неизвестна)",
+        "details": {
+          "status": "MISSING"
+        },
+        "timestamp": "2025-09-23 15:32:41.382209"
+      },
+      {
+        "action_type": "remove_order",
+        "symbol": "SOLUSDT",
+        "order_id": "137717882869",
+        "description": "UNKNOWN ордер исчез с биржи (причина неизвестна)",
+        "details": {
+          "status": "MISSING"
+        },
+        "timestamp": "2025-09-23 15:32:41.657018"
+      },
+      {
+        "action_type": "remove_order",
+        "symbol": "BTCUSDT",
+        "order_id": "760364767339",
+        "description": "UNKNOWN ордер исчез с биржи (причина неизвестна)",
+        "details": {
+          "status": "MISSING"
+        },
+        "timestamp": "2025-09-23 15:32:41.915334"
+      },
+      {
+        "action_type": "remove_order",
+        "symbol": "ADAUSDT",
+        "order_id": "58463515009",
+        "description": "UNKNOWN ордер исчез с биржи (причина неизвестна)",
+        "details": {
+          "status": "MISSING"
+        },
+        "timestamp": "2025-09-23 15:32:42.176835"
+      },
+      {
+        "action_type": "remove_order",
+        "symbol": "WIFUSDT",
+        "order_id": "20706149857",
+        "description": "UNKNOWN ордер исчез с биржи (причина неизвестна)",
+        "details": {
+          "status": "MISSING"
+        },
+        "timestamp": "2025-09-23 15:32:42.437587"
+      },
+      {
+        "action_type": "remove_order",
+        "symbol": "XRPUSDT",
+        "order_id": "121973788744",
+        "description": "UNKNOWN ордер исчез с биржи (причина неизвестна)",
+        "details": {
+          "status": "MISSING"
+        },
+        "timestamp": "2025-09-23 15:32:42.697400"
+      },
+      {
+        "action_type": "remove_order",
+        "symbol": "XTZUSDT",
+        "order_id": "12292177403",
+        "description": "UNKNOWN ордер исчез с биржи (причина неизвестна)",
+        "details": {
+          "status": "MISSING"
+        },
+        "timestamp": "2025-09-23 15:32:42.956753"
+      },
+      {
+        "action_type": "remove_order",
+        "symbol": "CRVUSDT",
+        "order_id": "43668315106",
+        "description": "UNKNOWN ордер исчез с биржи (причина неизвестна)",
+        "details": {
+          "status": "MISSING"
+        },
+        "timestamp": "2025-09-23 15:32:43.217562"
+      },
+      {
+        "action_type": "remove_order",
+        "symbol": "ADAUSDT",
+        "order_id": "58467564664",
+        "description": "UNKNOWN ордер исчез с биржи (причина неизвестна)",
+        "details": {
+          "status": "MISSING"
+        },
+        "timestamp": "2025-09-23 15:32:43.478044"
+      },
+      {
+        "action_type": "remove_order",
+        "symbol": "ALGOUSDT",
+        "order_id": "13926956775",
+        "description": "UNKNOWN ордер исчез с биржи (причина неизвестна)",
+        "details": {
+          "status": "MISSING"
+        },
+        "timestamp": "2025-09-23 15:32:43.737400"
+      },
+      {
+        "action_type": "remove_order",
+        "symbol": "XRPUSDT",
+        "order_id": "121985299654",
+        "description": "UNKNOWN ордер исчез с биржи (причина неизвестна)",
+        "details": {
+          "status": "MISSING"
+        },
+        "timestamp": "2025-09-23 15:32:43.997020"
+      },
+      {
+        "action_type": "remove_order",
+        "symbol": "XRPUSDT",
+        "order_id": "121997071273",
+        "description": "UNKNOWN ордер исчез с биржи (причина неизвестна)",
+        "details": {
+          "status": "MISSING"
+        },
+        "timestamp": "2025-09-23 15:32:44.256476"
+      },
+      {
+        "action_type": "remove_order",
+        "symbol": "XLMUSDT",
+        "order_id": "19416847101",
+        "description": "UNKNOWN ордер исчез с биржи (причина неизвестна)",
+        "details": {
+          "status": "MISSING"
+        },
+        "timestamp": "2025-09-23 15:32:44.514447"
+      },
+      {
+        "action_type": "remove_order",
+        "symbol": "XTZUSDT",
+        "order_id": "12293186822",
+        "description": "UNKNOWN ордер исчез с биржи (причина неизвестна)",
+        "details": {
+          "status": "MISSING"
+        },
+        "timestamp": "2025-09-23 15:32:44.782471"
+      },
+      {
+        "action_type": "remove_order",
+        "symbol": "BNBUSDT",
+        "order_id": "75793170619",
+        "description": "UNKNOWN ордер исчез с биржи (причина неизвестна)",
+        "details": {
+          "status": "MISSING"
+        },
+        "timestamp": "2025-09-23 15:32:45.047722"
+      },
+      {
+        "action_type": "remove_order",
+        "symbol": "SOLUSDT",
+        "order_id": "145725683043",
+        "description": "UNKNOWN ордер исчез с биржи (причина неизвестна)",
+        "details": {
+          "status": "MISSING"
+        },
+        "timestamp": "2025-09-23 15:32:45.312953"
+      },
+      {
+        "action_type": "remove_order",
+        "symbol": "CRVUSDT",
+        "order_id": "43678188131",
+        "description": "UNKNOWN ордер исчез с биржи (причина неизвестна)",
+        "details": {
+          "status": "MISSING"
+        },
+        "timestamp": "2025-09-23 15:32:45.573124"
+      },
+      {
+        "action_type": "remove_order",
+        "symbol": "WIFUSDT",
+        "order_id": "20726931681",
+        "description": "UNKNOWN ордер исчез с биржи (причина неизвестна)",
+        "details": {
+          "status": "MISSING"
+        },
+        "timestamp": "2025-09-23 15:32:45.833322"
+      },
+      {
+        "action_type": "remove_order",
+        "symbol": "BTCUSDT",
+        "order_id": "776417133227",
+        "description": "UNKNOWN ордер исчез с биржи (причина неизвестна)",
+        "details": {
+          "status": "MISSING"
+        },
+        "timestamp": "2025-09-23 15:32:46.092460"
+      },
+      {
+        "action_type": "remove_order",
+        "symbol": "XLMUSDT",
+        "order_id": "19426831450",
+        "description": "UNKNOWN ордер исчез с биржи (причина неизвестна)",
+        "details": {
+          "status": "MISSING"
+        },
+        "timestamp": "2025-09-23 15:32:46.354062"
+      },
+      {
+        "action_type": "remove_order",
+        "symbol": "WIFUSDT",
+        "order_id": "20727910738",
+        "description": "UNKNOWN ордер исчез с биржи (причина неизвестна)",
+        "details": {
+          "status": "MISSING"
+        },
+        "timestamp": "2025-09-23 15:32:46.615814"
+      },
+      {
+        "action_type": "remove_order",
+        "symbol": "ADAUSDT",
+        "order_id": "58506590675",
+        "description": "UNKNOWN ордер исчез с биржи (причина неизвестна)",
+        "details": {
+          "status": "MISSING"
+        },
+        "timestamp": "2025-09-23 15:32:46.877200"
+      },
+      {
+        "action_type": "remove_order",
+        "symbol": "BCHUSDT",
+        "order_id": "35653598972",
+        "description": "UNKNOWN ордер исчез с биржи (причина неизвестна)",
+        "details": {
+          "status": "MISSING"
+        },
+        "timestamp": "2025-09-23 15:32:47.138684"
+      },
+      {
+        "action_type": "remove_order",
+        "symbol": "XLMUSDT",
+        "order_id": "19427763109",
+        "description": "UNKNOWN ордер исчез с биржи (причина неизвестна)",
+        "details": {
+          "status": "MISSING"
+        },
+        "timestamp": "2025-09-23 15:32:47.396737"
+      },
+      {
+        "action_type": "remove_order",
+        "symbol": "XRPUSDT",
+        "order_id": "122142472897",
+        "description": "UNKNOWN ордер исчез с биржи (причина неизвестна)",
+        "details": {
+          "status": "MISSING"
+        },
+        "timestamp": "2025-09-23 15:32:47.688076"
       }
     ],
     "warnings": [],
