@@ -229,41 +229,79 @@ class OrderMonitor:
         """Обрабатывает исполненный ордер"""
         try:
             ticker = order_group['ticker']
-            
             # Определяем тип ордера
             if order_id == order_group['stop_order_id']:
                 order_type = "STOP"
             elif order_id == order_group['tp_order_id']:
                 order_type = "TAKE_PROFIT"
+            elif order_id == order_group['main_order_id']:
+                order_type = "LIMIT"
             else:
-                return  # Основной ордер мы не отслеживаем
-            
+                return
+
             if order_type == "STOP":
-                # Исполнился Stop Loss - отменяем Take Profit
                 logger.warning(f"🛡️ STOP LOSS исполнен для {ticker}")
-                
                 tp_order_id = order_group['tp_order_id']
                 self._cancel_order(ticker, tp_order_id, "Stop Loss исполнен")
-                
-                # Отправляем уведомление
                 self._send_stop_loss_notification(order_group, order_data)
-                
-                # Удаляем группу из мониторинга
                 self._remove_order_group(order_group)
-                
+
             elif order_type == "TAKE_PROFIT":
-                # Исполнился Take Profit - отменяем Stop Loss
                 logger.info(f"🎯 TAKE PROFIT исполнен для {ticker}")
-                
                 stop_order_id = order_group['stop_order_id']
                 self._cancel_order(ticker, stop_order_id, "Take Profit исполнен")
-                
-                # Отправляем уведомление
                 self._send_take_profit_notification(order_group, order_data)
-                
-                # Удаляем группу из мониторинга
                 self._remove_order_group(order_group)
-                
+
+            elif order_type == "LIMIT":
+                # Исполнился лимитный ордер
+                logger.info(f"📥 LIMIT ORDER исполнен для {ticker} | ID: {order_id} | Цена: {order_data.get('ap', 'N/A')} | Время: {datetime.now().strftime('%H:%M:%S')}")
+
+                # Создаем Stop Loss и Take Profit ордера
+                signal_data = order_group.get('signal_data', {})
+                position_side = signal_data.get('position_side', 'BOTH')
+                quantity = order_group.get('quantity', 0)
+                stop_loss = signal_data.get('stop_loss')
+                take_profit = signal_data.get('take_profit')
+                side = 'SELL' if signal_data.get('signal') == 'LONG' else 'BUY'
+
+
+                # Проверяем инициализацию клиента
+                if not self.binance_client:
+                    logger.error("❌ Binance client не инициализирован, невозможно создать SL/TP ордера")
+                else:
+                    # Создать Stop Loss
+                    try:
+                        stop_order = self.binance_client.futures_create_order(
+                            symbol=ticker,
+                            side=side,
+                            type='STOP_MARKET',
+                            quantity=quantity,
+                            stopPrice=str(stop_loss),
+                            positionSide=position_side
+                        )
+                        logger.info(f"🛑 STOP LOSS ордер создан: {stop_order['orderId']} для {ticker}")
+                    except Exception as e:
+                        logger.error(f"❌ Ошибка создания Stop Loss: {e}")
+
+                    # Создать Take Profit
+                    try:
+                        tp_order = self.binance_client.futures_create_order(
+                            symbol=ticker,
+                            side=side,
+                            type='TAKE_PROFIT_MARKET',
+                            quantity=quantity,
+                            stopPrice=str(take_profit),
+                            positionSide=position_side
+                        )
+                        logger.info(f"🎯 TAKE PROFIT MARKET ордер создан: {tp_order['orderId']} для {ticker}")
+                    except Exception as e:
+                        logger.error(f"❌ Ошибка создания Take Profit Market: {e}")
+
+                # Отправить уведомление в Telegram
+                message = f"\n📥 LIMIT ORDER ИСПОЛНЕН\n\nСимвол: {ticker}\nID: {order_id}\nЦена: {order_data.get('ap', 'N/A')}\nВремя: {datetime.now().strftime('%H:%M:%S')}\n\nStop Loss и Take Profit ордера созданы."
+                telegram_bot.send_message(message)
+
         except Exception as e:
             logger.error(f"❌ Ошибка обработки исполненного ордера: {e}")
     

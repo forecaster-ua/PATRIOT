@@ -18,10 +18,10 @@ class APIClient:
     """Handles all API communications with signal provider"""
     
     def __init__(self):
-        self.base_url = "https://5ca35593a63d.ngrok-free.app/"  # Base URL for the API
+        self.base_url = "http://194.135.94.212:8001/confirm-trade"  # Base URL for the API
         self.session = requests.Session()
         self.session.headers.update({
-            "Authorization": "Bearer my_secret_9876_maxa",
+            "Authorization": "Bearer maxa-secret-123",
             "Content-Type": "application/json"
         })
         self._consecutive_500s = 0
@@ -101,6 +101,7 @@ class APIClient:
                 'entry_price': float(data.get('entry_price', 0)),   
                 'take_profit': float(data.get('take_profit', 0)),
                 'stop_loss': float(data.get('stop_loss', 0)),
+                'risk_reward': float(data.get('risk_reward', 0)),
                 'confidence': float(data.get('confidence', 0)),
                 'dominance': float(data.get('dominance', 0)),
                 'dominance_change_percent': float(data.get('dominance_change_percent', 0)),

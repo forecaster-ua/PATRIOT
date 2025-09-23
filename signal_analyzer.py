@@ -38,8 +38,8 @@ class SignalAnalyzer:
         """
         self.ticker = ticker
         self.timeframes = TIMEFRAMES
-        self.price_threshold = 0.01  # 0.5% - максимальная разница в ценах входа
-        
+        self.price_threshold = 0.005  # 0.5% - максимальная разница в ценах входа
+
         logger.debug(f"Initialized SignalAnalyzer for {ticker}")
 
     def fetch_all_signals(self, stop_event=None) -> Dict[str, Optional[Dict]]:

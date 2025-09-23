@@ -159,6 +159,28 @@ class SymbolCache:
                         'precision_qty': len(str(lot_size_filter['stepSize']).split('.')[-1].rstrip('0')) if lot_size_filter else 3
                     }
             
+            # Добавляем leverage brackets для всех найденных символов
+            logger.info("🔄 Загрузка leverage brackets для символов...")
+            leverage_loaded = 0
+            
+            for symbol in filters_data['symbols'].keys():
+                try:
+                    brackets = self.binance_client.futures_leverage_bracket(symbol=symbol)
+                    if brackets and len(brackets) > 0:
+                        symbol_brackets = brackets[0].get('brackets', [])
+                        if symbol_brackets:
+                            # Добавляем leverage brackets в данные символа
+                            filters_data['symbols'][symbol]['leverage_brackets'] = symbol_brackets
+                            leverage_loaded += 1
+                except Exception as e:
+                    logger.debug(f"⚠️ Не удалось загрузить leverage brackets для {symbol}: {e}")
+                    # Добавляем дефолтные значения если не удалось загрузить
+                    filters_data['symbols'][symbol]['leverage_brackets'] = [
+                        {'initialLeverage': 20, 'notionalCap': 50000, 'maintMarginRatio': 0.05}
+                    ]
+            
+            logger.info(f"✅ Leverage brackets загружены для {leverage_loaded}/{len(filters_data['symbols'])} символов")
+            
             logger.info(f"✅ Загружено фильтров для {found_count}/{len(symbols)} символов")
             return filters_data
             
@@ -354,6 +376,80 @@ class SymbolCache:
         except:
             return {'cached_symbols': 0, 'cache_age': 'Invalid', 'cache_valid': False}
 
+    def get_leverage_brackets(self, symbol: str) -> List[Dict]:
+        """Получает leverage brackets для символа из кэша"""
+        if not self.cache_data:
+            if not self.update_cache():
+                return []
+        
+        symbol_info = self.cache_data['symbols'].get(symbol, {})
+        return symbol_info.get('leverage_brackets', [])
+
+    def calculate_optimal_leverage(self, symbol: str, notional_value: float, default_leverage: int = 20) -> int:
+        """
+        Рассчитывает оптимальное плечо для символа и размера позиции
+        
+        Args:
+            symbol: Торговый символ (например, 'BTCUSDT')
+            notional_value: Номинальная стоимость позиции (quantity × price)
+            default_leverage: Дефолтное плечо из настроек
+            
+        Returns:
+            int: Оптимальное плечо для данной позиции
+        """
+        brackets = self.get_leverage_brackets(symbol)
+        
+        if not brackets:
+            logger.warning(f"⚠️ Нет данных о leverage brackets для {symbol}, используем дефолтное плечо {default_leverage}x")
+            return default_leverage
+        
+        # Ищем максимальное доступное плечо для данной суммы
+        max_leverage = default_leverage
+        
+        for bracket in brackets:
+            notional_cap = float(bracket.get('notionalCap', 0))
+            initial_leverage = int(bracket.get('initialLeverage', 1))
+            
+            # Если позиция помещается в этот bracket
+            if notional_value <= notional_cap:
+                max_leverage = initial_leverage
+                break
+        
+        # Используем минимальное из дефолтного и максимально допустимого
+        optimal_leverage = min(default_leverage, max_leverage)
+        
+        if optimal_leverage != default_leverage:
+            logger.info(f"📊 {symbol}: плечо скорректировано с {default_leverage}x на {optimal_leverage}x для позиции ${notional_value:,.0f}")
+        
+        return optimal_leverage
+
+    def get_leverage_info(self, symbol: str) -> Dict:
+        """
+        Получает полную информацию о плече для символа
+        
+        Returns:
+            Dict с информацией о min/max плече и brackets
+        """
+        brackets = self.get_leverage_brackets(symbol)
+        
+        if not brackets:
+            return {
+                'min_leverage': 1,
+                'max_leverage': 20,
+                'brackets': [],
+                'available': False
+            }
+        
+        min_leverage = min(bracket['initialLeverage'] for bracket in brackets)
+        max_leverage = max(bracket['initialLeverage'] for bracket in brackets)
+        
+        return {
+            'min_leverage': min_leverage,
+            'max_leverage': max_leverage,
+            'brackets': brackets,
+            'available': True
+        }
+
 
 # Глобальный экземпляр кэша (Singleton pattern)
 _symbol_cache_instance = None
@@ -378,6 +474,14 @@ def round_quantity_for_symbol(symbol: str, quantity: float) -> float:
 def validate_order_for_symbol(symbol: str, price: float, quantity: float) -> Tuple[float, float, bool]:
     """Быстрая валидация ордера для символа"""
     return get_symbol_cache().validate_order_params(symbol, price, quantity)
+
+def calculate_leverage_for_symbol(symbol: str, notional_value: float, default_leverage: int = 20) -> int:
+    """Быстрый расчет оптимального плеча для символа"""
+    return get_symbol_cache().calculate_optimal_leverage(symbol, notional_value, default_leverage)
+
+def get_leverage_info_for_symbol(symbol: str) -> Dict:
+    """Быстрое получение информации о плече для символа"""
+    return get_symbol_cache().get_leverage_info(symbol)
 
 
 # Тест системы кэша

@@ -18,7 +18,7 @@ Author: HEDGER
 Version: 1.0 - MVP Integration
 """
 
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple, List
 from decimal import Decimal, ROUND_UP, ROUND_HALF_UP
 from datetime import datetime, timedelta
 import time
@@ -28,18 +28,18 @@ import asyncio
 # Локальные импорты
 from utils import logger
 from telegram_bot import telegram_bot
-from symbol_cache import get_symbol_cache, round_price_for_symbol, round_quantity_for_symbol
+from symbol_cache import get_symbol_cache, round_price_for_symbol, round_quantity_for_symbol, calculate_leverage_for_symbol
 from config import BINANCE_API_KEY, BINANCE_API_SECRET, BINANCE_TESTNET, MULTIPLE_ORDERS, MAX_CONCURRENT_ORDERS, RISK_PERCENT, FUTURES_LEVERAGE, FUTURES_MARGIN_TYPE
 
 # Синхронизация заказов
 try:
-    from orders_synchronizer import validate_signal_before_execution
+    from unified_sync import validate_signal_before_execution
     SYNC_AVAILABLE = True
     logger.info("✅ Orders Synchronizer подключен")
 except ImportError:
     logger.warning("⚠️ Orders Synchronizer недоступен")
     SYNC_AVAILABLE = False
-    def validate_signal_before_execution(symbol, side, quantity):
+    def validate_signal_before_execution(symbol, side, quantity) -> Tuple[bool, str]:
         """Mock validation when synchronizer is not available"""
         return True, "Synchronizer недоступен"
 
@@ -74,6 +74,7 @@ class OrderExecutor:
         
         self.binance_client = None
         self.symbol_cache = get_symbol_cache()
+        self.order_lock = threading.Lock()  # 🔒 Thread-safe lock для проверки ордеров
         self._init_binance_client()
         
         # Создаем lifecycle manager после инициализации
@@ -182,17 +183,35 @@ class OrderExecutor:
             logger.error(f"❌ Ошибка получения цены {ticker}: {e}")
             return 0.0
     
-    def set_leverage(self, ticker: str) -> bool:
-        """Устанавливает плечо для символа"""
+    def set_leverage(self, ticker: str, notional_value: Optional[float] = None) -> bool:
+        """
+        Устанавливает оптимальное плечо для символа
+        
+        Args:
+            ticker: Торговый символ
+            notional_value: Номинальная стоимость позиции (quantity * price)
+                           Если не указана, используется дефолтное плечо
+        """
         if not self.binance_client:
             return False
         
         try:
+            # Рассчитываем оптимальное плечо
+            if notional_value:
+                optimal_leverage = calculate_leverage_for_symbol(ticker, notional_value, FUTURES_LEVERAGE)
+            else:
+                optimal_leverage = FUTURES_LEVERAGE
+            
             result = self.binance_client.futures_change_leverage(
                 symbol=ticker, 
-                leverage=FUTURES_LEVERAGE
+                leverage=optimal_leverage
             )
-            logger.info(f"✅ Плечо {FUTURES_LEVERAGE}x установлено для {ticker}")
+            
+            if optimal_leverage != FUTURES_LEVERAGE:
+                logger.info(f"✅ Динамическое плечо {optimal_leverage}x установлено для {ticker} (позиция: ${notional_value:,.0f})")
+            else:
+                logger.info(f"✅ Плечо {optimal_leverage}x установлено для {ticker}")
+            
             return True
         except Exception as e:
             logger.warning(f"⚠️ Не удалось установить плечо для {ticker}: {e}")
@@ -366,18 +385,36 @@ class OrderExecutor:
                     # Разрешено открывать повторные ордера - проверяем лимит
                     self._send_multiple_orders_allowed_notification(ticker, signal_data, position_info)
                     
-                    # Проверяем количество открытых ордеров по символу
-                    open_orders_count = self._count_open_orders_for_symbol(ticker)
-                    if open_orders_count >= MAX_CONCURRENT_ORDERS:
-                        self._send_max_orders_limit_notification(ticker, signal_data, open_orders_count)
-                        return {
-                            'success': False,
-                            'error': f'Достигнут лимит ордеров для {ticker}: {open_orders_count}/{MAX_CONCURRENT_ORDERS}',
-                            'signal_data': signal_data,
-                            'open_orders_count': open_orders_count
-                        }
-                    # Продолжаем выполнение...
-            
+                    # 🔒 КРИТИЧЕСКАЯ СЕКЦИЯ: Thread-safe проверка лимита для символа
+                    with self.order_lock:
+                        positions_count, orders_count, total_active = self._count_active_positions_and_orders_for_symbol(ticker)
+                        
+                        if total_active >= MAX_CONCURRENT_ORDERS:
+                            self._send_max_symbol_limit_notification(ticker, signal_data, positions_count, orders_count, total_active)
+                            return {
+                                'success': False,
+                                'error': f'Достигнут лимит для {ticker}: {total_active}/{MAX_CONCURRENT_ORDERS} (позиций: {positions_count}, ордеров: {orders_count})',
+                                'signal_data': signal_data,
+                                'total_active': total_active,
+                                'positions_count': positions_count,
+                                'orders_count': orders_count
+                            }
+                        
+                        # Проверяем качество цены (должна быть "even or better")
+                        side = 'BUY' if signal_data['signal'] == 'LONG' else 'SELL'
+                        entry_price = float(signal_data['entry_price'])
+                        price_acceptable, price_reason = self._check_price_quality(ticker, side, entry_price)
+                        
+                        if not price_acceptable:
+                            self._send_price_quality_notification(ticker, signal_data, price_reason)
+                            return {
+                                'success': False,
+                                'error': f'Цена не соответствует требованию "even or better": {price_reason}',
+                                'signal_data': signal_data,
+                                'price_reason': price_reason
+                            }
+                    # 🔒 КОНЕЦ КРИТИЧЕСКОЙ СЕКЦИИ
+                    
             # Настраиваем параметры символа (плечо и режим маржи)
             self.setup_symbol_settings(ticker)
             
@@ -436,11 +473,10 @@ class OrderExecutor:
             tp_order = self.binance_client.futures_create_order(
                 symbol=ticker,
                 side=tp_side,
-                type='LIMIT',
+                type='TAKE_PROFIT_MARKET',
                 quantity=quantity,
-                price=tp_price,
-                timeInForce='GTC',
-                positionSide=position_side  # Тот же positionSide!
+                stopPrice=str(tp_price),
+                positionSide=position_side
             )
             
             logger.info(f"🎯 Take Profit размещен: {tp_order['orderId']} at {tp_price}")
@@ -712,8 +748,131 @@ class OrderExecutor:
             logger.error(f"❌ Ошибка подсчета ордеров для {symbol}: {e}")
             return 0
     
+    def _count_active_positions_and_orders_for_symbol(self, symbol: str) -> Tuple[int, int, int]:
+        """
+        Подсчитывает РЕАЛЬНЫЕ открытые позиции (FILLED) и pending ордера для конкретного символа
+        
+        Returns:
+            tuple: (filled_positions, pending_orders, total_for_limit_check) для символа
+        """
+        try:
+            if not self.binance_client:
+                return 0, 0, 0
+            
+            # Получаем реальные FILLED позиции для символа
+            account_info = self.binance_client.futures_account()
+            filled_positions = 0
+            
+            for position in account_info.get('positions', []):
+                if position['symbol'] == symbol:
+                    position_amt = float(position.get('positionAmt', 0))
+                    if position_amt != 0:  # Реально открытая FILLED позиция
+                        filled_positions += 1
+                        break  # Для одного символа может быть максимум 1 позиция
+            
+            # Получаем pending ордера для символа  
+            open_orders = self.binance_client.futures_get_open_orders(symbol=symbol)
+            pending_orders = len(open_orders)
+            
+            # Для лимита считаем: реальные позиции + pending ордера
+            total_for_limit = filled_positions + pending_orders
+            
+            logger.debug(f"📊 {symbol} status: {filled_positions} FILLED positions + {pending_orders} pending orders = {total_for_limit} total")
+            
+            return filled_positions, pending_orders, total_for_limit
+            
+        except Exception as e:
+            logger.error(f"❌ Ошибка подсчета для {symbol}: {e}")
+            return 0, 0, 0
+            
+    def _get_open_orders_with_prices(self, symbol: str, side: str) -> List[Dict]:
+        """
+        Получает открытые ордера с ценами для проверки качества цены
+        
+        Args:
+            symbol: Торговый символ
+            side: Сторона ордера (BUY/SELL)
+            
+        Returns:
+            List[Dict]: Список ордеров с ценами
+        """
+        try:
+            if not self.binance_client:
+                return []
+                
+            open_orders = self.binance_client.futures_get_open_orders(symbol=symbol)
+            
+            # Фильтруем по стороне и типу ордера
+            relevant_orders = []
+            for order in open_orders:
+                if order.get('side') == side and order.get('type') == 'LIMIT':
+                    relevant_orders.append({
+                        'orderId': order['orderId'],
+                        'price': float(order['price']),
+                        'side': order['side'],
+                        'quantity': float(order['origQty'])
+                    })
+            
+            return relevant_orders
+            
+        except Exception as e:
+            logger.error(f"❌ Ошибка получения ордеров с ценами для {symbol}: {e}")
+            return []
+            
+    def _check_price_quality(self, symbol: str, side: str, new_price: float) -> Tuple[bool, str]:
+        """
+        Проверяет качество цены нового ордера согласно LONG/SHORT логике
+        
+        Args:
+            symbol: Торговый символ  
+            side: Сторона ордера (BUY/SELL)
+            new_price: Цена нового ордера
+            
+        Returns:
+            Tuple[is_acceptable: bool, reason: str]
+        """
+        try:
+            # Получаем все релевантные цены (позиции + ордера)
+            relevant_prices = []
+            
+            # 1. Проверяем открытые позиции 
+            if self.binance_client:
+                account_info = self.binance_client.futures_account()
+                for position in account_info.get('positions', []):
+                    if position['symbol'] == symbol:
+                        position_amt = float(position.get('positionAmt', 0))
+                        if position_amt != 0:
+                            entry_price = float(position['entryPrice'])
+                            relevant_prices.append(entry_price)
+            
+            # 2. Проверяем открытые ордера того же типа
+            existing_orders = self._get_open_orders_with_prices(symbol, side)
+            for order in existing_orders:
+                relevant_prices.append(order['price'])
+            
+            if not relevant_prices:
+                return True, "Нет существующих позиций или ордеров"
+            
+            # 3. Применяем логику для LONG/SHORT
+            if side == 'BUY':  # LONG позиции
+                # Для LONG: новая цена должна быть НИЖЕ лучшей существующей
+                min_existing_price = min(relevant_prices)
+                if new_price >= min_existing_price:
+                    return False, f"LONG: новая цена {new_price} должна быть ниже лучшей {min_existing_price}"
+            else:  # SELL / SHORT позиции  
+                # Для SHORT: новая цена должна быть ВЫШЕ лучшей существующей
+                max_existing_price = max(relevant_prices)
+                if new_price <= max_existing_price:
+                    return False, f"SHORT: новая цена {new_price} должна быть выше лучшей {max_existing_price}"
+            
+            return True, "Цена соответствует требованиям"
+            
+        except Exception as e:
+            logger.error(f"❌ Ошибка проверки качества цены для {symbol}: {e}")
+            return True, "Ошибка проверки, разрешаем"
+    
     def _send_max_orders_limit_notification(self, ticker: str, signal_data: Dict, open_orders_count: int) -> None:
-        """Уведомление о достижении лимита ордеров"""
+        """Уведомление о достижении лимита ордеров для символа (устаревший метод)"""
         try:
             signal_type = signal_data.get('signal', 'N/A')
             entry_price = signal_data.get('entry_price', 0)
@@ -738,6 +897,96 @@ class OrderExecutor:
             
         except Exception as e:
             logger.error(f"❌ Ошибка отправки уведомления о лимите: {e}")
+
+    def _send_max_portfolio_limit_notification(self, ticker: str, signal_data: Dict, positions_count: int, orders_count: int, total_active: int) -> None:
+        """Уведомление о достижении общего лимита портфеля (устаревший метод)"""
+        try:
+            signal_type = signal_data.get('signal', 'N/A')
+            entry_price = signal_data.get('entry_price', 0)
+            
+            message = f"""
+🚫 <b>ЛИМИТ ПОРТФЕЛЯ ДОСТИГНУТ</b> 🚫
+
+📊 <b>Символ:</b> {ticker}
+🎯 <b>Сигнал (отклонен):</b> {signal_type}
+💵 <b>Цена сигнала:</b> {entry_price}
+
+📈 <b>Текущий портфель:</b>
+   • Активные позиции: {positions_count}
+   • Открытые ордера: {orders_count}
+   • Всего активно: {total_active}/{MAX_CONCURRENT_ORDERS}
+
+⚙️ <b>MAX_CONCURRENT_ORDERS = {MAX_CONCURRENT_ORDERS}</b>
+
+❌ <b>Новый ордер НЕ размещен</b>
+💡 <b>Дождитесь закрытия позиций или ордеров</b>
+
+⏰ {datetime.now().strftime('%H:%M:%S')}
+"""
+            
+            telegram_bot.send_message(message)
+            logger.warning(f"🚫 ПОРТФЕЛЬ-ЛИМИТ: {ticker} отклонен - {total_active}/{MAX_CONCURRENT_ORDERS} активно")
+            
+        except Exception as e:
+            logger.error(f"❌ Ошибка отправки уведомления о лимите портфеля: {e}")
+
+    def _send_max_symbol_limit_notification(self, ticker: str, signal_data: Dict, positions_count: int, orders_count: int, total_active: int) -> None:
+        """Уведомление о достижении лимита для конкретного символа"""
+        try:
+            signal_type = signal_data.get('signal', 'N/A')
+            entry_price = signal_data.get('entry_price', 0)
+            
+            message = f"""
+🚫 <b>ЛИМИТ ДЛЯ {ticker} ДОСТИГНУТ</b> 🚫
+
+📊 <b>Символ:</b> {ticker}
+🎯 <b>Сигнал (отклонен):</b> {signal_type}
+💵 <b>Цена сигнала:</b> {entry_price}
+
+📈 <b>Текущее состояние {ticker}:</b>
+   • Активные позиции: {positions_count}
+   • Открытые ордера: {orders_count}
+   • Всего активно: {total_active}/{MAX_CONCURRENT_ORDERS}
+
+⚙️ <b>MAX_CONCURRENT_ORDERS = {MAX_CONCURRENT_ORDERS}</b>
+
+❌ <b>Новый ордер НЕ размещен</b>
+💡 <b>Дождитесь исполнения или закрытия ордеров по {ticker}</b>
+
+⏰ {datetime.now().strftime('%H:%M:%S')}
+"""
+            
+            telegram_bot.send_message(message)
+            logger.warning(f"🚫 СИМВОЛ-ЛИМИТ: {ticker} отклонен - {total_active}/{MAX_CONCURRENT_ORDERS} активно")
+            
+        except Exception as e:
+            logger.error(f"❌ Ошибка отправки уведомления о лимите символа: {e}")
+            
+    def _send_price_quality_notification(self, ticker: str, signal_data: Dict, price_reason: str) -> None:
+        """Уведомление о неприемлемом качестве цены"""
+        try:
+            signal_type = signal_data.get('signal', 'N/A')
+            entry_price = signal_data.get('entry_price', 0)
+            
+            message = f"""
+⚠️ <b>ЦЕНА НЕ СООТВЕТСТВУЕТ ТРЕБОВАНИЮ</b> ⚠️
+
+📊 <b>Символ:</b> {ticker}
+🎯 <b>Сигнал (отклонен):</b> {signal_type}
+💵 <b>Предлагаемая цена:</b> {entry_price}
+
+❌ <b>Причина отклонения:</b> {price_reason}
+
+💡 <b>Требование:</b> Новый ордер должен иметь цену "equal or better" чем существующие ордера
+
+⏰ {datetime.now().strftime('%H:%M:%S')}
+"""
+            
+            telegram_bot.send_message(message)
+            logger.warning(f"⚠️ ЦЕНА ОТКЛОНЕНА: {ticker} - {price_reason}")
+            
+        except Exception as e:
+            logger.error(f"❌ Ошибка отправки уведомления о качестве цены: {e}")
     
     def _send_synchronization_conflict_notification(self, ticker: str, signal_data: Dict, validation_reason: str) -> None:
         """Уведомление о конфликте синхронизации"""
@@ -815,7 +1064,7 @@ class OrderLifecycleManager:
             # Отменяем предыдущий ордер если есть
             self._cancel_pending_order(ticker)
             
-            # Настраиваем параметры символа
+            # Настраиваем параметры символа (базовые)
             self.executor.setup_symbol_settings(ticker)
             
             # Рассчитываем размер позиции
@@ -829,6 +1078,16 @@ class OrderLifecycleManager:
                     'error': f'Не удалось рассчитать позицию: {error_msg}',
                     'signal_data': signal_data
                 }
+            
+            # Рассчитываем номинальную стоимость позиции для динамического плеча
+            notional_value = quantity * entry_price
+            
+            # Устанавливаем оптимальное плечо на основе размера позиции
+            logger.info(f"📊 Рассчитываем оптимальное плечо для {ticker} (позиция: ${notional_value:,.2f})")
+            leverage_ok = self.executor.set_leverage(ticker, notional_value)
+            
+            if not leverage_ok:
+                logger.warning(f"⚠️ Не удалось установить плечо для {ticker}, используем существующее")
             
             # Размещаем ТОЛЬКО основной лимитный ордер
             side = 'BUY' if signal_type == 'LONG' else 'SELL'

@@ -1,0 +1,53 @@
+PATRIOT Trading System: Signal to Order Workflow Analysis
+========================================================
+
+1. Signal Reception
+-------------------
+- Trading signal received from API (direction, entry price, stop loss, take profit, etc.)
+- Signal is processed and validated.
+- Telegram notification sent with signal details.
+
+2. Limit Order Placement
+------------------------
+- If signal is valid, limit order is placed at entry price.
+- If a previous limit order exists and new signal price is better, previous order is canceled and new limit order is placed.
+- Telegram notification sent about order cancellation and new order placement.
+- Multiple orders allowed if previous limit order is executed and new signal price is better than executed order.
+
+3. Limit Order Execution
+------------------------
+- (ISSUE) No message is sent when limit order is executed.
+- (ISSUE) No stop loss or take profit order is placed after limit order execution.
+
+4. Stop Loss & Take Profit Orders
+---------------------------------
+- (EXPECTED) After limit order execution, stop loss and take profit orders should be placed (OCO logic).
+- (ISSUE) These orders are not being set after limit order execution.
+- Need to verify if OCO logic is implemented and triggered correctly after limit order execution.
+
+5. Order Follow-ups & Settlements
+---------------------------------
+- System should monitor order status and send follow-up messages (executed, canceled, failed, etc.).
+- Telegram notifications should reflect all key events (order execution, stop/take triggered, etc.).
+
+What Works Fine
+---------------
+- Canceling and setting new limit order if new signal price is better than previous limit order price.
+- Reporting of such events to Telegram.
+- Multiple orders allowed if previous limit order is executed and new limit order price is better than previously executed order.
+
+Key Issues to Investigate
+-------------------------
+1. Why are limit order execution messages not sent?
+2. Why are stop loss and take profit orders not set after limit order execution?
+3. Is OCO logic implemented and triggered after limit order execution?
+4. Are all order events (execution, stop/take, cancellation) reported to Telegram?
+
+Action Plan (Project Manager Lead)
+----------------------------------
+- Review order execution handler logic for missing Telegram notifications.
+- Audit post-limit-order-execution workflow to ensure stop loss and take profit orders are created.
+- Validate OCO logic implementation and triggering after limit order execution.
+- Ensure all order events are logged and reported to Telegram.
+- Assign responsible developers to investigate and fix each issue.
+- Schedule workflow tests and monitor for correct event reporting and order handling.

@@ -1,5 +1,5 @@
 {
-  "timestamp": "2025-07-23T01:14:01.544171",
+  "timestamp": "2025-09-22T09:18:49.196932",
   "symbols": {
     "BTCUSDT": {
       "status": "TRADING",
@@ -10,7 +10,105 @@
       "min_qty": "0.001",
       "max_qty": "1000",
       "precision_price": 1,
-      "precision_qty": 3
+      "precision_qty": 3,
+      "leverage_brackets": [
+        {
+          "bracket": 1,
+          "initialLeverage": 150,
+          "notionalCap": 300000,
+          "notionalFloor": 0,
+          "maintMarginRatio": 0.004,
+          "cum": 0.0
+        },
+        {
+          "bracket": 2,
+          "initialLeverage": 100,
+          "notionalCap": 800000,
+          "notionalFloor": 300000,
+          "maintMarginRatio": 0.005,
+          "cum": 300.0
+        },
+        {
+          "bracket": 3,
+          "initialLeverage": 75,
+          "notionalCap": 3000000,
+          "notionalFloor": 800000,
+          "maintMarginRatio": 0.0065,
+          "cum": 1500.0
+        },
+        {
+          "bracket": 4,
+          "initialLeverage": 50,
+          "notionalCap": 12000000,
+          "notionalFloor": 3000000,
+          "maintMarginRatio": 0.01,
+          "cum": 12000.0
+        },
+        {
+          "bracket": 5,
+          "initialLeverage": 25,
+          "notionalCap": 70000000,
+          "notionalFloor": 12000000,
+          "maintMarginRatio": 0.02,
+          "cum": 132000.0
+        },
+        {
+          "bracket": 6,
+          "initialLeverage": 20,
+          "notionalCap": 100000000,
+          "notionalFloor": 70000000,
+          "maintMarginRatio": 0.025,
+          "cum": 482000.0
+        },
+        {
+          "bracket": 7,
+          "initialLeverage": 10,
+          "notionalCap": 230000000,
+          "notionalFloor": 100000000,
+          "maintMarginRatio": 0.05,
+          "cum": 2982000.0
+        },
+        {
+          "bracket": 8,
+          "initialLeverage": 5,
+          "notionalCap": 480000000,
+          "notionalFloor": 230000000,
+          "maintMarginRatio": 0.1,
+          "cum": 14482000.0
+        },
+        {
+          "bracket": 9,
+          "initialLeverage": 4,
+          "notionalCap": 600000000,
+          "notionalFloor": 480000000,
+          "maintMarginRatio": 0.125,
+          "cum": 26482000.0
+        },
+        {
+          "bracket": 10,
+          "initialLeverage": 3,
+          "notionalCap": 800000000,
+          "notionalFloor": 600000000,
+          "maintMarginRatio": 0.15,
+          "cum": 41482000.0
+        },
+        {
+          "bracket": 11,
+          "initialLeverage": 2,
+          "notionalCap": 1200000000,
+          "notionalFloor": 800000000,
+          "maintMarginRatio": 0.25,
+          "cum": 121482000.0
+        },
+        {
+          "bracket": 12,
+          "initialLeverage": 1,
+          "notionalCap": 1800000000,
+          "notionalFloor": 1200000000,
+          "maintMarginRatio": 0.5,
+          "cum": 421482000.0
+        }
+      ]
     },
     "ETHUSDT": {
       "status": "TRADING",
@@ -21,7 +119,105 @@
       "min_qty": "0.001",
       "max_qty": "10000",
       "precision_price": 2,
-      "precision_qty": 3
+      "precision_qty": 3,
+      "leverage_brackets": [
+        {
+          "bracket": 1,
+          "initialLeverage": 150,
+          "notionalCap": 300000,
+          "notionalFloor": 0,
+          "maintMarginRatio": 0.004,
+          "cum": 0.0
+        },
+        {
+          "bracket": 2,
+          "initialLeverage": 100,
+          "notionalCap": 800000,
+          "notionalFloor": 300000,
+          "maintMarginRatio": 0.005,
+          "cum": 300.0
+        },
+        {
+          "bracket": 3,
+          "initialLeverage": 75,
+          "notionalCap": 3000000,
+          "notionalFloor": 800000,
+          "maintMarginRatio": 0.0065,
+          "cum": 1500.0
+        },
+        {
+          "bracket": 4,
+          "initialLeverage": 50,
+          "notionalCap": 12000000,
+          "notionalFloor": 3000000,
+          "maintMarginRatio": 0.01,
+          "cum": 12000.0
+        },
+        {
+          "bracket": 5,
+          "initialLeverage": 25,
+          "notionalCap": 50000000,
+          "notionalFloor": 12000000,
+          "maintMarginRatio": 0.02,
+          "cum": 132000.0
+        },
+        {
+          "bracket": 6,
+          "initialLeverage": 20,
+          "notionalCap": 65000000,
+          "notionalFloor": 50000000,
+          "maintMarginRatio": 0.025,
+          "cum": 382000.0
+        },
+        {
+          "bracket": 7,
+          "initialLeverage": 10,
+          "notionalCap": 150000000,
+          "notionalFloor": 65000000,
+          "maintMarginRatio": 0.05,
+          "cum": 2007000.0
+        },
+        {
+          "bracket": 8,
+          "initialLeverage": 5,
+          "notionalCap": 320000000,
+          "notionalFloor": 150000000,
+          "maintMarginRatio": 0.1,
+          "cum": 9507000.0
+        },
+        {
+          "bracket": 9,
+          "initialLeverage": 4,
+          "notionalCap": 400000000,
+          "notionalFloor": 320000000,
+          "maintMarginRatio": 0.125,
+          "cum": 17507000.0
+        },
+        {
+          "bracket": 10,
+          "initialLeverage": 3,
+          "notionalCap": 530000000,
+          "notionalFloor": 400000000,
+          "maintMarginRatio": 0.15,
+          "cum": 27507000.0
+        },
+        {
+          "bracket": 11,
+          "initialLeverage": 2,
+          "notionalCap": 800000000,
+          "notionalFloor": 530000000,
+          "maintMarginRatio": 0.25,
+          "cum": 80507000.0
+        },
+        {
+          "bracket": 12,
+          "initialLeverage": 1,
+          "notionalCap": 1200000000,
+          "notionalFloor": 800000000,
+          "maintMarginRatio": 0.5,
+          "cum": 280507000.0
+        }
+      ]
     },
     "BCHUSDT": {
       "status": "TRADING",
@@ -32,7 +228,89 @@
       "min_qty": "0.001",
       "max_qty": "10000",
       "precision_price": 2,
-      "precision_qty": 3
+      "precision_qty": 3,
+      "leverage_brackets": [
+        {
+          "bracket": 1,
+          "initialLeverage": 75,
+          "notionalCap": 10000,
+          "notionalFloor": 0,
+          "maintMarginRatio": 0.005,
+          "cum": 0.0
+        },
+        {
+          "bracket": 2,
+          "initialLeverage": 50,
+          "notionalCap": 100000,
+          "notionalFloor": 10000,
+          "maintMarginRatio": 0.01,
+          "cum": 50.0
+        },
+        {
+          "bracket": 3,
+          "initialLeverage": 40,
+          "notionalCap": 160000,
+          "notionalFloor": 100000,
+          "maintMarginRatio": 0.015,
+          "cum": 550.0
+        },
+        {
+          "bracket": 4,
+          "initialLeverage": 25,
+          "notionalCap": 800000,
+          "notionalFloor": 160000,
+          "maintMarginRatio": 0.02,
+          "cum": 1350.0
+        },
+        {
+          "bracket": 5,
+          "initialLeverage": 20,
+          "notionalCap": 1600000,
+          "notionalFloor": 800000,
+          "maintMarginRatio": 0.025,
+          "cum": 5350.0
+        },
+        {
+          "bracket": 6,
+          "initialLeverage": 10,
+          "notionalCap": 8000000,
+          "notionalFloor": 1600000,
+          "maintMarginRatio": 0.05,
+          "cum": 45350.0
+        },
+        {
+          "bracket": 7,
+          "initialLeverage": 5,
+          "notionalCap": 16000000,
+          "notionalFloor": 8000000,
+          "maintMarginRatio": 0.1,
+          "cum": 445350.0
+        },
+        {
+          "bracket": 8,
+          "initialLeverage": 4,
+          "notionalCap": 20000000,
+          "notionalFloor": 16000000,
+          "maintMarginRatio": 0.125,
+          "cum": 845350.0
+        },
+        {
+          "bracket": 9,
+          "initialLeverage": 2,
+          "notionalCap": 40000000,
+          "notionalFloor": 20000000,
+          "maintMarginRatio": 0.25,
+          "cum": 3345350.0
+        },
+        {
+          "bracket": 10,
+          "initialLeverage": 1,
+          "notionalCap": 80000000,
+          "notionalFloor": 40000000,
+          "maintMarginRatio": 0.5,
+          "cum": 13345350.0
+        }
+      ]
     },
     "XRPUSDT": {
       "status": "TRADING",
@@ -43,40 +321,97 @@
       "min_qty": "0.1",
       "max_qty": "10000000",
       "precision_price": 4,
-      "precision_qty": 1
-    },
-    "LTCUSDT": {
-      "status": "TRADING",
-      "tick_size": "0.01",
-      "min_price": "3.61",
-      "max_price": "100000",
-      "step_size": "0.001",
-      "min_qty": "0.001",
-      "max_qty": "10000",
-      "precision_price": 2,
-      "precision_qty": 3
-    },
-    "ETCUSDT": {
-      "status": "TRADING",
-      "tick_size": "0.001",
-      "min_price": "1.051",
-      "max_price": "100000",
-      "step_size": "0.01",
-      "min_qty": "0.01",
-      "max_qty": "100000",
-      "precision_price": 3,
-      "precision_qty": 2
-    },
-    "LINKUSDT": {
-      "status": "TRADING",
-      "tick_size": "0.001",
-      "min_price": "0.464",
-      "max_price": "100000",
-      "step_size": "0.01",
-      "min_qty": "0.01",
-      "max_qty": "200000",
-      "precision_price": 3,
-      "precision_qty": 2
+      "precision_qty": 1,
+      "leverage_brackets": [
+        {
+          "bracket": 1,
+          "initialLeverage": 100,
+          "notionalCap": 40000,
+          "notionalFloor": 0,
+          "maintMarginRatio": 0.005,
+          "cum": 0.0
+        },
+        {
+          "bracket": 2,
+          "initialLeverage": 75,
+          "notionalCap": 80000,
+          "notionalFloor": 40000,
+          "maintMarginRatio": 0.006,
+          "cum": 40.0
+        },
+        {
+          "bracket": 3,
+          "initialLeverage": 50,
+          "notionalCap": 150000,
+          "notionalFloor": 80000,
+          "maintMarginRatio": 0.01,
+          "cum": 360.0
+        },
+        {
+          "bracket": 4,
+          "initialLeverage": 40,
+          "notionalCap": 400000,
+          "notionalFloor": 150000,
+          "maintMarginRatio": 0.0125,
+          "cum": 735.0
+        },
+        {
+          "bracket": 5,
+          "initialLeverage": 25,
+          "notionalCap": 1000000,
+          "notionalFloor": 400000,
+          "maintMarginRatio": 0.02,
+          "cum": 3735.0
+        },
+        {
+          "bracket": 6,
+          "initialLeverage": 20,
+          "notionalCap": 2000000,
+          "notionalFloor": 1000000,
+          "maintMarginRatio": 0.025,
+          "cum": 8735.0
+        },
+        {
+          "bracket": 7,
+          "initialLeverage": 10,
+          "notionalCap": 10000000,
+          "notionalFloor": 2000000,
+          "maintMarginRatio": 0.05,
+          "cum": 58735.0
+        },
+        {
+          "bracket": 8,
+          "initialLeverage": 5,
+          "notionalCap": 20000000,
+          "notionalFloor": 10000000,
+          "maintMarginRatio": 0.1,
+          "cum": 558735.0
+        },
+        {
+          "bracket": 9,
+          "initialLeverage": 4,
+          "notionalCap": 25000000,
+          "notionalFloor": 20000000,
+          "maintMarginRatio": 0.125,
+          "cum": 1058735.0
+        },
+        {
+          "bracket": 10,
+          "initialLeverage": 2,
+          "notionalCap": 50000000,
+          "notionalFloor": 25000000,
+          "maintMarginRatio": 0.25,
+          "cum": 4183735.0
+        },
+        {
+          "bracket": 11,
+          "initialLeverage": 1,
+          "notionalCap": 100000000,
+          "notionalFloor": 50000000,
+          "maintMarginRatio": 0.5,
+          "cum": 16683735.0
+        }
+      ]
     },
     "XLMUSDT": {
       "status": "TRADING",
@@ -87,7 +422,81 @@
       "min_qty": "1",
       "max_qty": "10000000",
       "precision_price": 5,
-      "precision_qty": 1
+      "precision_qty": 1,
+      "leverage_brackets": [
+        {
+          "bracket": 1,
+          "initialLeverage": 75,
+          "notionalCap": 10000,
+          "notionalFloor": 0,
+          "maintMarginRatio": 0.01,
+          "cum": 0.0
+        },
+        {
+          "bracket": 2,
+          "initialLeverage": 50,
+          "notionalCap": 100000,
+          "notionalFloor": 10000,
+          "maintMarginRatio": 0.015,
+          "cum": 50.0
+        },
+        {
+          "bracket": 3,
+          "initialLeverage": 25,
+          "notionalCap": 500000,
+          "notionalFloor": 100000,
+          "maintMarginRatio": 0.02,
+          "cum": 550.0
+        },
+        {
+          "bracket": 4,
+          "initialLeverage": 20,
+          "notionalCap": 1000000,
+          "notionalFloor": 500000,
+          "maintMarginRatio": 0.025,
+          "cum": 3050.0
+        },
+        {
+          "bracket": 5,
+          "initialLeverage": 10,
+          "notionalCap": 5000000,
+          "notionalFloor": 1000000,
+          "maintMarginRatio": 0.05,
+          "cum": 28050.0
+        },
+        {
+          "bracket": 6,
+          "initialLeverage": 5,
+          "notionalCap": 10000000,
+          "notionalFloor": 5000000,
+          "maintMarginRatio": 0.1,
+          "cum": 278050.0
+        },
+        {
+          "bracket": 7,
+          "initialLeverage": 4,
+          "notionalCap": 12500000,
+          "notionalFloor": 10000000,
+          "maintMarginRatio": 0.125,
+          "cum": 528050.0
+        },
+        {
+          "bracket": 8,
+          "initialLeverage": 2,
+          "notionalCap": 25000000,
+          "notionalFloor": 12500000,
+          "maintMarginRatio": 0.25,
+          "cum": 2090550.0
+        },
+        {
+          "bracket": 9,
+          "initialLeverage": 1,
+          "notionalCap": 50000000,
+          "notionalFloor": 25000000,
+          "maintMarginRatio": 0.5,
+          "cum": 8340550.0
+        }
+      ]
     },
     "ADAUSDT": {
       "status": "TRADING",
@@ -98,7 +507,89 @@
       "min_qty": "1",
       "max_qty": "6000000",
       "precision_price": 4,
-      "precision_qty": 1
+      "precision_qty": 1,
+      "leverage_brackets": [
+        {
+          "bracket": 1,
+          "initialLeverage": 75,
+          "notionalCap": 10000,
+          "notionalFloor": 0,
+          "maintMarginRatio": 0.005,
+          "cum": 0.0
+        },
+        {
+          "bracket": 2,
+          "initialLeverage": 50,
+          "notionalCap": 50000,
+          "notionalFloor": 10000,
+          "maintMarginRatio": 0.01,
+          "cum": 50.0
+        },
+        {
+          "bracket": 3,
+          "initialLeverage": 40,
+          "notionalCap": 200000,
+          "notionalFloor": 50000,
+          "maintMarginRatio": 0.015,
+          "cum": 300.0
+        },
+        {
+          "bracket": 4,
+          "initialLeverage": 25,
+          "notionalCap": 1000000,
+          "notionalFloor": 200000,
+          "maintMarginRatio": 0.02,
+          "cum": 1300.0
+        },
+        {
+          "bracket": 5,
+          "initialLeverage": 20,
+          "notionalCap": 2000000,
+          "notionalFloor": 1000000,
+          "maintMarginRatio": 0.025,
+          "cum": 6300.0
+        },
+        {
+          "bracket": 6,
+          "initialLeverage": 10,
+          "notionalCap": 10000000,
+          "notionalFloor": 2000000,
+          "maintMarginRatio": 0.05,
+          "cum": 56300.0
+        },
+        {
+          "bracket": 7,
+          "initialLeverage": 5,
+          "notionalCap": 20000000,
+          "notionalFloor": 10000000,
+          "maintMarginRatio": 0.1,
+          "cum": 556300.0
+        },
+        {
+          "bracket": 8,
+          "initialLeverage": 4,
+          "notionalCap": 25000000,
+          "notionalFloor": 20000000,
+          "maintMarginRatio": 0.125,
+          "cum": 1056300.0
+        },
+        {
+          "bracket": 9,
+          "initialLeverage": 2,
+          "notionalCap": 50000000,
+          "notionalFloor": 25000000,
+          "maintMarginRatio": 0.25,
+          "cum": 4181300.0
+        },
+        {
+          "bracket": 10,
+          "initialLeverage": 1,
+          "notionalCap": 100000000,
+          "notionalFloor": 50000000,
+          "maintMarginRatio": 0.5,
+          "cum": 16681300.0
+        }
+      ]
     },
     "XTZUSDT": {
       "status": "TRADING",
@@ -109,7 +600,97 @@
       "min_qty": "0.1",
       "max_qty": "1000000",
       "precision_price": 3,
-      "precision_qty": 1
+      "precision_qty": 1,
+      "leverage_brackets": [
+        {
+          "bracket": 1,
+          "initialLeverage": 75,
+          "notionalCap": 5000,
+          "notionalFloor": 0,
+          "maintMarginRatio": 0.01,
+          "cum": 0.0
+        },
+        {
+          "bracket": 2,
+          "initialLeverage": 50,
+          "notionalCap": 10000,
+          "notionalFloor": 5000,
+          "maintMarginRatio": 0.015,
+          "cum": 25.0
+        },
+        {
+          "bracket": 3,
+          "initialLeverage": 25,
+          "notionalCap": 50000,
+          "notionalFloor": 10000,
+          "maintMarginRatio": 0.02,
+          "cum": 75.0
+        },
+        {
+          "bracket": 4,
+          "initialLeverage": 20,
+          "notionalCap": 100000,
+          "notionalFloor": 50000,
+          "maintMarginRatio": 0.025,
+          "cum": 325.0
+        },
+        {
+          "bracket": 5,
+          "initialLeverage": 15,
+          "notionalCap": 175000,
+          "notionalFloor": 100000,
+          "maintMarginRatio": 0.0333,
+          "cum": 1155.0
+        },
+        {
+          "bracket": 6,
+          "initialLeverage": 10,
+          "notionalCap": 250000,
+          "notionalFloor": 175000,
+          "maintMarginRatio": 0.05,
+          "cum": 4077.5
+        },
+        {
+          "bracket": 7,
+          "initialLeverage": 5,
+          "notionalCap": 750000,
+          "notionalFloor": 250000,
+          "maintMarginRatio": 0.1,
+          "cum": 16577.5
+        },
+        {
+          "bracket": 8,
+          "initialLeverage": 4,
+          "notionalCap": 1500000,
+          "notionalFloor": 750000,
+          "maintMarginRatio": 0.125,
+          "cum": 35327.5
+        },
+        {
+          "bracket": 9,
+          "initialLeverage": 3,
+          "notionalCap": 4500000,
+          "notionalFloor": 1500000,
+          "maintMarginRatio": 0.1667,
+          "cum": 97877.5
+        },
+        {
+          "bracket": 10,
+          "initialLeverage": 2,
+          "notionalCap": 7500000,
+          "notionalFloor": 4500000,
+          "maintMarginRatio": 0.25,
+          "cum": 472727.5
+        },
+        {
+          "bracket": 11,
+          "initialLeverage": 1,
+          "notionalCap": 12000000,
+          "notionalFloor": 7500000,
+          "maintMarginRatio": 0.5,
+          "cum": 2347727.5
+        }
+      ]
     },
     "BNBUSDT": {
       "status": "TRADING",
@@ -120,40 +701,89 @@
       "min_qty": "0.01",
       "max_qty": "100000",
       "precision_price": 2,
-      "precision_qty": 2
-    },
-    "ATOMUSDT": {
-      "status": "TRADING",
-      "tick_size": "0.001",
-      "min_price": "0.251",
-      "max_price": "100000",
-      "step_size": "0.01",
-      "min_qty": "0.01",
-      "max_qty": "100000",
-      "precision_price": 3,
-      "precision_qty": 2
-    },
-    "QTUMUSDT": {
-      "status": "TRADING",
-      "tick_size": "0.001",
-      "min_price": "0.246",
-      "max_price": "100000",
-      "step_size": "0.1",
-      "min_qty": "0.1",
-      "max_qty": "500000",
-      "precision_price": 3,
-      "precision_qty": 1
-    },
-    "THETAUSDT": {
-      "status": "TRADING",
-      "tick_size": "0.0001",
-      "min_price": "0.1070",
-      "max_price": "1000",
-      "step_size": "0.1",
-      "min_qty": "0.1",
-      "max_qty": "1000000",
-      "precision_price": 4,
-      "precision_qty": 1
+      "precision_qty": 2,
+      "leverage_brackets": [
+        {
+          "bracket": 1,
+          "initialLeverage": 75,
+          "notionalCap": 10000,
+          "notionalFloor": 0,
+          "maintMarginRatio": 0.005,
+          "cum": 0.0
+        },
+        {
+          "bracket": 2,
+          "initialLeverage": 50,
+          "notionalCap": 200000,
+          "notionalFloor": 10000,
+          "maintMarginRatio": 0.006,
+          "cum": 10.0
+        },
+        {
+          "bracket": 3,
+          "initialLeverage": 40,
+          "notionalCap": 400000,
+          "notionalFloor": 200000,
+          "maintMarginRatio": 0.01,
+          "cum": 810.0
+        },
+        {
+          "bracket": 4,
+          "initialLeverage": 25,
+          "notionalCap": 1500000,
+          "notionalFloor": 400000,
+          "maintMarginRatio": 0.02,
+          "cum": 4810.0
+        },
+        {
+          "bracket": 5,
+          "initialLeverage": 20,
+          "notionalCap": 3000000,
+          "notionalFloor": 1500000,
+          "maintMarginRatio": 0.025,
+          "cum": 12310.0
+        },
+        {
+          "bracket": 6,
+          "initialLeverage": 10,
+          "notionalCap": 15000000,
+          "notionalFloor": 3000000,
+          "maintMarginRatio": 0.05,
+          "cum": 87310.0
+        },
+        {
+          "bracket": 7,
+          "initialLeverage": 5,
+          "notionalCap": 30000000,
+          "notionalFloor": 15000000,
+          "maintMarginRatio": 0.1,
+          "cum": 837310.0
+        },
+        {
+          "bracket": 8,
+          "initialLeverage": 4,
+          "notionalCap": 37500000,
+          "notionalFloor": 30000000,
+          "maintMarginRatio": 0.125,
+          "cum": 1587310.0
+        },
+        {
+          "bracket": 9,
+          "initialLeverage": 2,
+          "notionalCap": 75000000,
+          "notionalFloor": 37500000,
+          "maintMarginRatio": 0.25,
+          "cum": 6274810.0
+        },
+        {
+          "bracket": 10,
+          "initialLeverage": 1,
+          "notionalCap": 150000000,
+          "notionalFloor": 75000000,
+          "maintMarginRatio": 0.5,
+          "cum": 25024810.0
+        }
+      ]
     },
     "ALGOUSDT": {
       "status": "TRADING",
@@ -164,128 +794,97 @@
       "min_qty": "0.1",
       "max_qty": "5000000",
       "precision_price": 4,
-      "precision_qty": 1
-    },
-    "KNCUSDT": {
-      "status": "TRADING",
-      "tick_size": "0.00010",
-      "min_price": "0.03200",
-      "max_price": "181",
-      "step_size": "1",
-      "min_qty": "1",
-      "max_qty": "5000000",
-      "precision_price": 4,
-      "precision_qty": 1
-    },
-    "ZRXUSDT": {
-      "status": "TRADING",
-      "tick_size": "0.0001",
-      "min_price": "0.0179",
-      "max_price": "1000",
-      "step_size": "0.1",
-      "min_qty": "0.1",
-      "max_qty": "1000000",
-      "precision_price": 4,
-      "precision_qty": 1
-    },
-    "OMGUSDT": {
-      "status": "SETTLING",
-      "tick_size": "0.0001",
-      "min_price": "0.1060",
-      "max_price": "1000",
-      "step_size": "0.1",
-      "min_qty": "0.1",
-      "max_qty": "1000000",
-      "precision_price": 4,
-      "precision_qty": 1
-    },
-    "DOGEUSDT": {
-      "status": "TRADING",
-      "tick_size": "0.000010",
-      "min_price": "0.002440",
-      "max_price": "30",
-      "step_size": "1",
-      "min_qty": "1",
-      "max_qty": "50000000",
-      "precision_price": 5,
-      "precision_qty": 1
-    },
-    "KAVAUSDT": {
-      "status": "TRADING",
-      "tick_size": "0.0001",
-      "min_price": "0.0593",
-      "max_price": "653",
-      "step_size": "0.1",
-      "min_qty": "0.1",
-      "max_qty": "1000000",
-      "precision_price": 4,
-      "precision_qty": 1
-    },
-    "BANDUSDT": {
-      "status": "TRADING",
-      "tick_size": "0.0001",
-      "min_price": "0.1647",
-      "max_price": "783",
-      "step_size": "0.1",
-      "min_qty": "0.1",
-      "max_qty": "2000000",
-      "precision_price": 4,
-      "precision_qty": 1
-    },
-    "MKRUSDT": {
-      "status": "TRADING",
-      "tick_size": "0.10",
-      "min_price": "50",
-      "max_price": "351788",
-      "step_size": "0.001",
-      "min_qty": "0.001",
-      "max_qty": "10000",
-      "precision_price": 1,
-      "precision_qty": 3
-    },
-    "SNXUSDT": {
-      "status": "TRADING",
-      "tick_size": "0.001",
-      "min_price": "0.164",
-      "max_price": "1144",
-      "step_size": "0.1",
-      "min_qty": "0.1",
-      "max_qty": "1000000",
-      "precision_price": 3,
-      "precision_qty": 1
-    },
-    "DOTUSDT": {
-      "status": "TRADING",
-      "tick_size": "0.001",
-      "min_price": "0.373",
-      "max_price": "2398",
-      "step_size": "0.1",
-      "min_qty": "0.1",
-      "max_qty": "1000000",
-      "precision_price": 3,
-      "precision_qty": 1
-    },
-    "YFIUSDT": {
-      "status": "TRADING",
-      "tick_size": "1",
-      "min_price": "667",
-      "max_price": "3836373",
-      "step_size": "0.001",
-      "min_qty": "0.001",
-      "max_qty": "500",
-      "precision_price": 1,
-      "precision_qty": 3
-    },
-    "BALUSDT": {
-      "status": "SETTLING",
-      "tick_size": "0.001",
-      "min_price": "0.001",
-      "max_price": "5000",
-      "step_size": "0.1",
-      "min_qty": "0.1",
-      "max_qty": "1000000",
-      "precision_price": 3,
-      "precision_qty": 1
+      "precision_qty": 1,
+      "leverage_brackets": [
+        {
+          "bracket": 1,
+          "initialLeverage": 75,
+          "notionalCap": 5000,
+          "notionalFloor": 0,
+          "maintMarginRatio": 0.01,
+          "cum": 0.0
+        },
+        {
+          "bracket": 2,
+          "initialLeverage": 50,
+          "notionalCap": 10000,
+          "notionalFloor": 5000,
+          "maintMarginRatio": 0.015,
+          "cum": 25.0
+        },
+        {
+          "bracket": 3,
+          "initialLeverage": 25,
+          "notionalCap": 50000,
+          "notionalFloor": 10000,
+          "maintMarginRatio": 0.02,
+          "cum": 75.0
+        },
+        {
+          "bracket": 4,
+          "initialLeverage": 20,
+          "notionalCap": 100000,
+          "notionalFloor": 50000,
+          "maintMarginRatio": 0.025,
+          "cum": 325.0
+        },
+        {
+          "bracket": 5,
+          "initialLeverage": 15,
+          "notionalCap": 175000,
+          "notionalFloor": 100000,
+          "maintMarginRatio": 0.0333,
+          "cum": 1155.0
+        },
+        {
+          "bracket": 6,
+          "initialLeverage": 10,
+          "notionalCap": 250000,
+          "notionalFloor": 175000,
+          "maintMarginRatio": 0.05,
+          "cum": 4077.5
+        },
+        {
+          "bracket": 7,
+          "initialLeverage": 5,
+          "notionalCap": 750000,
+          "notionalFloor": 250000,
+          "maintMarginRatio": 0.1,
+          "cum": 16577.5
+        },
+        {
+          "bracket": 8,
+          "initialLeverage": 4,
+          "notionalCap": 1500000,
+          "notionalFloor": 750000,
+          "maintMarginRatio": 0.125,
+          "cum": 35327.5
+        },
+        {
+          "bracket": 9,
+          "initialLeverage": 3,
+          "notionalCap": 4500000,
+          "notionalFloor": 1500000,
+          "maintMarginRatio": 0.1667,
+          "cum": 97877.5
+        },
+        {
+          "bracket": 10,
+          "initialLeverage": 2,
+          "notionalCap": 7500000,
+          "notionalFloor": 4500000,
+          "maintMarginRatio": 0.25,
+          "cum": 472727.5
+        },
+        {
+          "bracket": 11,
+          "initialLeverage": 1,
+          "notionalCap": 12500000,
+          "notionalFloor": 7500000,
+          "maintMarginRatio": 0.5,
+          "cum": 2347727.5
+        }
+      ]
     },
     "CRVUSDT": {
       "status": "TRADING",
@@ -296,29 +895,89 @@
       "min_qty": "0.1",
       "max_qty": "1000000",
       "precision_price": 3,
-      "precision_qty": 1
-    },
-    "RUNEUSDT": {
-      "status": "TRADING",
-      "tick_size": "0.0010",
-      "min_price": "0.1720",
-      "max_price": "839",
-      "step_size": "1",
-      "min_qty": "1",
-      "max_qty": "10000000",
-      "precision_price": 3,
-      "precision_qty": 1
-    },
-    "EGLDUSDT": {
-      "status": "TRADING",
-      "tick_size": "0.001",
-      "min_price": "1.770",
-      "max_price": "14295",
-      "step_size": "0.1",
-      "min_qty": "0.1",
-      "max_qty": "1000000",
-      "precision_price": 3,
-      "precision_qty": 1
+      "precision_qty": 1,
+      "leverage_brackets": [
+        {
+          "bracket": 1,
+          "initialLeverage": 75,
+          "notionalCap": 10000,
+          "notionalFloor": 0,
+          "maintMarginRatio": 0.0065,
+          "cum": 0.0
+        },
+        {
+          "bracket": 2,
+          "initialLeverage": 50,
+          "notionalCap": 50000,
+          "notionalFloor": 10000,
+          "maintMarginRatio": 0.01,
+          "cum": 35.0
+        },
+        {
+          "bracket": 3,
+          "initialLeverage": 40,
+          "notionalCap": 80000,
+          "notionalFloor": 50000,
+          "maintMarginRatio": 0.015,
+          "cum": 285.0
+        },
+        {
+          "bracket": 4,
+          "initialLeverage": 25,
+          "notionalCap": 300000,
+          "notionalFloor": 80000,
+          "maintMarginRatio": 0.02,
+          "cum": 685.0
+        },
+        {
+          "bracket": 5,
+          "initialLeverage": 20,
+          "notionalCap": 600000,
+          "notionalFloor": 300000,
+          "maintMarginRatio": 0.025,
+          "cum": 2185.0
+        },
+        {
+          "bracket": 6,
+          "initialLeverage": 10,
+          "notionalCap": 3000000,
+          "notionalFloor": 600000,
+          "maintMarginRatio": 0.05,
+          "cum": 17185.0
+        },
+        {
+          "bracket": 7,
+          "initialLeverage": 5,
+          "notionalCap": 6000000,
+          "notionalFloor": 3000000,
+          "maintMarginRatio": 0.1,
+          "cum": 167185.0
+        },
+        {
+          "bracket": 8,
+          "initialLeverage": 4,
+          "notionalCap": 7500000,
+          "notionalFloor": 6000000,
+          "maintMarginRatio": 0.125,
+          "cum": 317185.0
+        },
+        {
+          "bracket": 9,
+          "initialLeverage": 2,
+          "notionalCap": 15000000,
+          "notionalFloor": 7500000,
+          "maintMarginRatio": 0.25,
+          "cum": 1254685.0
+        },
+        {
+          "bracket": 10,
+          "initialLeverage": 1,
+          "notionalCap": 30000000,
+          "notionalFloor": 15000000,
+          "maintMarginRatio": 0.5,
+          "cum": 5004685.0
+        }
+      ]
     },
     "SOLUSDT": {
       "status": "TRADING",
@@ -329,29 +988,89 @@
       "min_qty": "0.01",
       "max_qty": "1000000",
       "precision_price": 2,
-      "precision_qty": 2
-    },
-    "STORJUSDT": {
-      "status": "TRADING",
-      "tick_size": "0.0001",
-      "min_price": "0.0190",
-      "max_price": "121",
-      "step_size": "1",
-      "min_qty": "1",
-      "max_qty": "10000000",
-      "precision_price": 4,
-      "precision_qty": 1
-    },
-    "UNIUSDT": {
-      "status": "TRADING",
-      "tick_size": "0.0010",
-      "min_price": "0.3730",
-      "max_price": "2684",
-      "step_size": "1",
-      "min_qty": "1",
-      "max_qty": "10000000",
-      "precision_price": 3,
-      "precision_qty": 1
+      "precision_qty": 2,
+      "leverage_brackets": [
+        {
+          "bracket": 1,
+          "initialLeverage": 100,
+          "notionalCap": 50000,
+          "notionalFloor": 0,
+          "maintMarginRatio": 0.005,
+          "cum": 0.0
+        },
+        {
+          "bracket": 2,
+          "initialLeverage": 75,
+          "notionalCap": 400000,
+          "notionalFloor": 50000,
+          "maintMarginRatio": 0.0065,
+          "cum": 75.0
+        },
+        {
+          "bracket": 3,
+          "initialLeverage": 50,
+          "notionalCap": 1000000,
+          "notionalFloor": 400000,
+          "maintMarginRatio": 0.01,
+          "cum": 1475.0
+        },
+        {
+          "bracket": 4,
+          "initialLeverage": 25,
+          "notionalCap": 4000000,
+          "notionalFloor": 1000000,
+          "maintMarginRatio": 0.02,
+          "cum": 11475.0
+        },
+        {
+          "bracket": 5,
+          "initialLeverage": 20,
+          "notionalCap": 8000000,
+          "notionalFloor": 4000000,
+          "maintMarginRatio": 0.025,
+          "cum": 31475.0
+        },
+        {
+          "bracket": 6,
+          "initialLeverage": 10,
+          "notionalCap": 40000000,
+          "notionalFloor": 8000000,
+          "maintMarginRatio": 0.05,
+          "cum": 231475.0
+        },
+        {
+          "bracket": 7,
+          "initialLeverage": 5,
+          "notionalCap": 80000000,
+          "notionalFloor": 40000000,
+          "maintMarginRatio": 0.1,
+          "cum": 2231475.0
+        },
+        {
+          "bracket": 8,
+          "initialLeverage": 4,
+          "notionalCap": 100000000,
+          "notionalFloor": 80000000,
+          "maintMarginRatio": 0.125,
+          "cum": 4231475.0
+        },
+        {
+          "bracket": 9,
+          "initialLeverage": 2,
+          "notionalCap": 200000000,
+          "notionalFloor": 100000000,
+          "maintMarginRatio": 0.25,
+          "cum": 16731475.0
+        },
+        {
+          "bracket": 10,
+          "initialLeverage": 1,
+          "notionalCap": 400000000,
+          "notionalFloor": 200000000,
+          "maintMarginRatio": 0.5,
+          "cum": 66731475.0
+        }
+      ]
     },
     "AVAXUSDT": {
       "status": "TRADING",
@@ -362,282 +1081,89 @@
       "min_qty": "1",
       "max_qty": "100000",
       "precision_price": 3,
-      "precision_qty": 1
-    },
-    "FTMUSDT": {
-      "status": "SETTLING",
-      "tick_size": "0.000100",
-      "min_price": "0.007700",
-      "max_price": "41",
-      "step_size": "1",
-      "min_qty": "1",
-      "max_qty": "10000000",
-      "precision_price": 4,
-      "precision_qty": 1
-    },
-    "ENJUSDT": {
-      "status": "TRADING",
-      "tick_size": "0.00001",
-      "min_price": "0.02250",
-      "max_price": "153",
-      "step_size": "1",
-      "min_qty": "1",
-      "max_qty": "15000000",
-      "precision_price": 5,
-      "precision_qty": 1
-    },
-    "FLMUSDT": {
-      "status": "TRADING",
-      "tick_size": "0.0001",
-      "min_price": "0.0096",
-      "max_price": "1000",
-      "step_size": "1",
-      "min_qty": "1",
-      "max_qty": "15000000",
-      "precision_price": 4,
-      "precision_qty": 1
-    },
-    "KSMUSDT": {
-      "status": "TRADING",
-      "tick_size": "0.001",
-      "min_price": "4.060",
-      "max_price": "28450",
-      "step_size": "0.1",
-      "min_qty": "0.1",
-      "max_qty": "1000000",
-      "precision_price": 3,
-      "precision_qty": 1
-    },
-    "NEARUSDT": {
-      "status": "TRADING",
-      "tick_size": "0.0010",
-      "min_price": "0.0480",
-      "max_price": "1000",
-      "step_size": "1",
-      "min_qty": "1",
-      "max_qty": "10000000",
-      "precision_price": 3,
-      "precision_qty": 1
-    },
-    "AAVEUSDT": {
-      "status": "TRADING",
-      "tick_size": "0.010",
-      "min_price": "4.340",
-      "max_price": "38702",
-      "step_size": "0.1",
-      "min_qty": "0.1",
-      "max_qty": "1000000",
-      "precision_price": 2,
-      "precision_qty": 1
-    },
-    "FILUSDT": {
-      "status": "TRADING",
-      "tick_size": "0.001",
-      "min_price": "1.381",
-      "max_price": "10000",
-      "step_size": "0.1",
-      "min_qty": "0.1",
-      "max_qty": "10000000",
-      "precision_price": 3,
-      "precision_qty": 1
-    },
-    "LRCUSDT": {
-      "status": "TRADING",
-      "tick_size": "0.00001",
-      "min_price": "0.00520",
-      "max_price": "100",
-      "step_size": "1",
-      "min_qty": "1",
-      "max_qty": "10000000",
-      "precision_price": 5,
-      "precision_qty": 1
-    },
-    "AXSUSDT": {
-      "status": "TRADING",
-      "tick_size": "0.00100",
-      "min_price": "0.08000",
-      "max_price": "6989",
-      "step_size": "1",
-      "min_qty": "1",
-      "max_qty": "10000000",
-      "precision_price": 3,
-      "precision_qty": 1
-    },
-    "ZENUSDT": {
-      "status": "TRADING",
-      "tick_size": "0.001",
-      "min_price": "1.437",
-      "max_price": "10000",
-      "step_size": "0.1",
-      "min_qty": "0.1",
-      "max_qty": "1000000",
-      "precision_price": 3,
-      "precision_qty": 1
-    },
-    "GRTUSDT": {
-      "status": "TRADING",
-      "tick_size": "0.00001",
-      "min_price": "0.01398",
-      "max_price": "100",
-      "step_size": "1",
-      "min_qty": "1",
-      "max_qty": "1000000",
-      "precision_price": 5,
-      "precision_qty": 1
-    },
-    "CHZUSDT": {
-      "status": "TRADING",
-      "tick_size": "0.00001",
-      "min_price": "0.00447",
-      "max_price": "100",
-      "step_size": "1",
-      "min_qty": "1",
-      "max_qty": "10000000",
-      "precision_price": 5,
-      "precision_qty": 1
-    },
-    "SANDUSDT": {
-      "status": "TRADING",
-      "tick_size": "0.00001",
-      "min_price": "0.00500",
-      "max_price": "20000",
-      "step_size": "1",
-      "min_qty": "1",
-      "max_qty": "10000000",
-      "precision_price": 5,
-      "precision_qty": 1
-    },
-    "MANAUSDT": {
-      "status": "TRADING",
-      "tick_size": "0.0001",
-      "min_price": "0.0136",
-      "max_price": "100000",
-      "step_size": "1",
-      "min_qty": "1",
-      "max_qty": "1000000",
-      "precision_price": 4,
-      "precision_qty": 1
-    },
-    "ALICEUSDT": {
-      "status": "TRADING",
-      "tick_size": "0.001",
-      "min_price": "0.120",
-      "max_price": "100000",
-      "step_size": "0.1",
-      "min_qty": "0.1",
-      "max_qty": "150000",
-      "precision_price": 3,
-      "precision_qty": 1
-    },
-    "HBARUSDT": {
-      "status": "TRADING",
-      "tick_size": "0.00001",
-      "min_price": "0.00279",
-      "max_price": "20000",
-      "step_size": "1",
-      "min_qty": "1",
-      "max_qty": "10000000",
-      "precision_price": 5,
-      "precision_qty": 1
-    },
-    "NKNUSDT": {
-      "status": "TRADING",
-      "tick_size": "0.00001",
-      "min_price": "0.00602",
-      "max_price": "20000",
-      "step_size": "1",
-      "min_qty": "1",
-      "max_qty": "10000000",
-      "precision_price": 5,
-      "precision_qty": 1
-    },
-    "RAYUSDT": {
-      "status": "SETTLING",
-      "tick_size": "0.001",
-      "min_price": "0.010",
-      "max_price": "100000",
-      "step_size": "0.1",
-      "min_qty": "0.1",
-      "max_qty": "500000",
-      "precision_price": 3,
-      "precision_qty": 1
-    },
-    "DYDXUSDT": {
-      "status": "TRADING",
-      "tick_size": "0.001",
-      "min_price": "0.010",
-      "max_price": "100000",
-      "step_size": "0.1",
-      "min_qty": "0.1",
-      "max_qty": "1000000",
-      "precision_price": 3,
-      "precision_qty": 1
-    },
-    "CTSIUSDT": {
-      "status": "TRADING",
-      "tick_size": "0.0001",
-      "min_price": "0.0010",
-      "max_price": "100000",
-      "step_size": "1",
-      "min_qty": "1",
-      "max_qty": "2000000",
-      "precision_price": 4,
-      "precision_qty": 1
-    },
-    "ROSEUSDT": {
-      "status": "TRADING",
-      "tick_size": "0.00001",
-      "min_price": "0.00010",
-      "max_price": "10000",
-      "step_size": "1",
-      "min_qty": "1",
-      "max_qty": "10000000",
-      "precision_price": 5,
-      "precision_qty": 1
-    },
-    "INJUSDT": {
-      "status": "TRADING",
-      "tick_size": "0.001000",
-      "min_price": "0.001000",
-      "max_price": "2000",
-      "step_size": "0.1",
-      "min_qty": "0.1",
-      "max_qty": "1000000",
-      "precision_price": 3,
-      "precision_qty": 1
-    },
-    "LDOUSDT": {
-      "status": "TRADING",
-      "tick_size": "0.000100",
-      "min_price": "0.001000",
-      "max_price": "2000",
-      "step_size": "1",
-      "min_qty": "1",
-      "max_qty": "150000",
-      "precision_price": 4,
-      "precision_qty": 1
-    },
-    "CVXUSDT": {
-      "status": "SETTLING",
-      "tick_size": "0.001000",
-      "min_price": "0.001000",
-      "max_price": "2000",
-      "step_size": "1",
-      "min_qty": "1",
-      "max_qty": "100000",
-      "precision_price": 3,
-      "precision_qty": 1
-    },
-    "ICPUSDT": {
-      "status": "TRADING",
-      "tick_size": "0.001000",
-      "min_price": "0.001000",
-      "max_price": "2000",
-      "step_size": "1",
-      "min_qty": "1",
-      "max_qty": "100000",
-      "precision_price": 3,
-      "precision_qty": 1
+      "precision_qty": 1,
+      "leverage_brackets": [
+        {
+          "bracket": 1,
+          "initialLeverage": 75,
+          "notionalCap": 25000,
+          "notionalFloor": 0,
+          "maintMarginRatio": 0.005,
+          "cum": 0.0
+        },
+        {
+          "bracket": 2,
+          "initialLeverage": 50,
+          "notionalCap": 80000,
+          "notionalFloor": 25000,
+          "maintMarginRatio": 0.01,
+          "cum": 125.0
+        },
+        {
+          "bracket": 3,
+          "initialLeverage": 40,
+          "notionalCap": 160000,
+          "notionalFloor": 80000,
+          "maintMarginRatio": 0.015,
+          "cum": 525.0
+        },
+        {
+          "bracket": 4,
+          "initialLeverage": 25,
+          "notionalCap": 800000,
+          "notionalFloor": 160000,
+          "maintMarginRatio": 0.02,
+          "cum": 1325.0
+        },
+        {
+          "bracket": 5,
+          "initialLeverage": 20,
+          "notionalCap": 1600000,
+          "notionalFloor": 800000,
+          "maintMarginRatio": 0.025,
+          "cum": 5325.0
+        },
+        {
+          "bracket": 6,
+          "initialLeverage": 10,
+          "notionalCap": 8000000,
+          "notionalFloor": 1600000,
+          "maintMarginRatio": 0.05,
+          "cum": 45325.0
+        },
+        {
+          "bracket": 7,
+          "initialLeverage": 5,
+          "notionalCap": 16000000,
+          "notionalFloor": 8000000,
+          "maintMarginRatio": 0.1,
+          "cum": 445325.0
+        },
+        {
+          "bracket": 8,
+          "initialLeverage": 4,
+          "notionalCap": 20000000,
+          "notionalFloor": 16000000,
+          "maintMarginRatio": 0.125,
+          "cum": 845325.0
+        },
+        {
+          "bracket": 9,
+          "initialLeverage": 2,
+          "notionalCap": 40000000,
+          "notionalFloor": 20000000,
+          "maintMarginRatio": 0.25,
+          "cum": 3345325.0
+        },
+        {
+          "bracket": 10,
+          "initialLeverage": 1,
+          "notionalCap": 80000000,
+          "notionalFloor": 40000000,
+          "maintMarginRatio": 0.5,
+          "cum": 13345325.0
+        }
+      ]
     },
     "APTUSDT": {
       "status": "TRADING",
@@ -648,150 +1174,81 @@
       "min_qty": "0.1",
       "max_qty": "1000000",
       "precision_price": 4,
-      "precision_qty": 1
-    },
-    "FXSUSDT": {
-      "status": "TRADING",
-      "tick_size": "0.000100",
-      "min_price": "0.001000",
-      "max_price": "2000",
-      "step_size": "0.1",
-      "min_qty": "0.1",
-      "max_qty": "1000000",
-      "precision_price": 4,
-      "precision_qty": 1
-    },
-    "GMXUSDT": {
-      "status": "TRADING",
-      "tick_size": "0.001000",
-      "min_price": "0.010000",
-      "max_price": "2000",
-      "step_size": "0.01",
-      "min_qty": "0.01",
-      "max_qty": "100000",
-      "precision_price": 3,
-      "precision_qty": 2
-    },
-    "PERPUSDT": {
-      "status": "TRADING",
-      "tick_size": "0.000100",
-      "min_price": "0.000100",
-      "max_price": "2000",
-      "step_size": "0.1",
-      "min_qty": "0.1",
-      "max_qty": "1000000",
-      "precision_price": 4,
-      "precision_qty": 1
-    },
-    "LQTYUSDT": {
-      "status": "TRADING",
-      "tick_size": "0.000100",
-      "min_price": "0.000100",
-      "max_price": "2000",
-      "step_size": "0.1",
-      "min_qty": "0.1",
-      "max_qty": "1000000",
-      "precision_price": 4,
-      "precision_qty": 1
-    },
-    "ARBUSDT": {
-      "status": "TRADING",
-      "tick_size": "0.000100",
-      "min_price": "0.000100",
-      "max_price": "2000",
-      "step_size": "0.1",
-      "min_qty": "0.1",
-      "max_qty": "5000000",
-      "precision_price": 4,
-      "precision_qty": 1
-    },
-    "TLMUSDT": {
-      "status": "TRADING",
-      "tick_size": "0.0000010",
-      "min_price": "0.0000100",
-      "max_price": "100",
-      "step_size": "1",
-      "min_qty": "1",
-      "max_qty": "15000000",
-      "precision_price": 6,
-      "precision_qty": 1
-    },
-    "HFTUSDT": {
-      "status": "TRADING",
-      "tick_size": "0.0000100",
-      "min_price": "0.0001000",
-      "max_price": "200",
-      "step_size": "1",
-      "min_qty": "1",
-      "max_qty": "10000000",
-      "precision_price": 5,
-      "precision_qty": 1
-    },
-    "SUIUSDT": {
-      "status": "TRADING",
-      "tick_size": "0.000100",
-      "min_price": "0.000100",
-      "max_price": "2000",
-      "step_size": "0.1",
-      "min_qty": "0.1",
-      "max_qty": "10000000",
-      "precision_price": 4,
-      "precision_qty": 1
-    },
-    "ARKMUSDT": {
-      "status": "TRADING",
-      "tick_size": "0.0001000",
-      "min_price": "0.0001000",
-      "max_price": "200",
-      "step_size": "1",
-      "min_qty": "1",
-      "max_qty": "5000000",
-      "precision_price": 4,
-      "precision_qty": 1
-    },
-    "SEIUSDT": {
-      "status": "TRADING",
-      "tick_size": "0.0001000",
-      "min_price": "0.0001000",
-      "max_price": "200",
-      "step_size": "1",
-      "min_qty": "1",
-      "max_qty": "10000000",
-      "precision_price": 4,
-      "precision_qty": 1
-    },
-    "TIAUSDT": {
-      "status": "TRADING",
-      "tick_size": "0.0001000",
-      "min_price": "0.0001000",
-      "max_price": "200",
-      "step_size": "1",
-      "min_qty": "1",
-      "max_qty": "1000000",
-      "precision_price": 4,
-      "precision_qty": 1
-    },
-    "ORDIUSDT": {
-      "status": "TRADING",
-      "tick_size": "0.001000",
-      "min_price": "0.001000",
-      "max_price": "2000",
-      "step_size": "0.1",
-      "min_qty": "0.1",
-      "max_qty": "100000",
-      "precision_price": 3,
-      "precision_qty": 1
-    },
-    "NTRNUSDT": {
-      "status": "TRADING",
-      "tick_size": "0.000100",
-      "min_price": "0.000100",
-      "max_price": "200",
-      "step_size": "1",
-      "min_qty": "1",
-      "max_qty": "1000000",
-      "precision_price": 4,
-      "precision_qty": 1
+      "precision_qty": 1,
+      "leverage_brackets": [
+        {
+          "bracket": 1,
+          "initialLeverage": 75,
+          "notionalCap": 10000,
+          "notionalFloor": 0,
+          "maintMarginRatio": 0.01,
+          "cum": 0.0
+        },
+        {
+          "bracket": 2,
+          "initialLeverage": 50,
+          "notionalCap": 100000,
+          "notionalFloor": 10000,
+          "maintMarginRatio": 0.015,
+          "cum": 50.0
+        },
+        {
+          "bracket": 3,
+          "initialLeverage": 25,
+          "notionalCap": 900000,
+          "notionalFloor": 100000,
+          "maintMarginRatio": 0.02,
+          "cum": 550.0
+        },
+        {
+          "bracket": 4,
+          "initialLeverage": 20,
+          "notionalCap": 1100000,
+          "notionalFloor": 900000,
+          "maintMarginRatio": 0.025,
+          "cum": 5050.0
+        },
+        {
+          "bracket": 5,
+          "initialLeverage": 10,
+          "notionalCap": 5000000,
+          "notionalFloor": 1100000,
+          "maintMarginRatio": 0.05,
+          "cum": 32550.0
+        },
+        {
+          "bracket": 6,
+          "initialLeverage": 5,
+          "notionalCap": 7000000,
+          "notionalFloor": 5000000,
+          "maintMarginRatio": 0.1,
+          "cum": 282550.0
+        },
+        {
+          "bracket": 7,
+          "initialLeverage": 4,
+          "notionalCap": 8000000,
+          "notionalFloor": 7000000,
+          "maintMarginRatio": 0.125,
+          "cum": 457550.0
+        },
+        {
+          "bracket": 8,
+          "initialLeverage": 2,
+          "notionalCap": 9000000,
+          "notionalFloor": 8000000,
+          "maintMarginRatio": 0.25,
+          "cum": 1457550.0
+        },
+        {
+          "bracket": 9,
+          "initialLeverage": 1,
+          "notionalCap": 10000000,
+          "notionalFloor": 9000000,
+          "maintMarginRatio": 0.5,
+          "cum": 3707550.0
+        }
+      ]
     },
     "WIFUSDT": {
       "status": "TRADING",
@@ -802,29 +1259,81 @@
       "min_qty": "0.1",
       "max_qty": "1000000",
       "precision_price": 4,
-      "precision_qty": 1
-    },
-    "JUPUSDT": {
-      "status": "TRADING",
-      "tick_size": "0.0001000",
-      "min_price": "0.0001000",
-      "max_price": "200",
-      "step_size": "1",
-      "min_qty": "1",
-      "max_qty": "1000000",
-      "precision_price": 4,
-      "precision_qty": 1
-    },
-    "STRKUSDT": {
-      "status": "TRADING",
-      "tick_size": "0.0001000",
-      "min_price": "0.0001000",
-      "max_price": "2000",
-      "step_size": "0.1",
-      "min_qty": "0.1",
-      "max_qty": "1000000",
-      "precision_price": 4,
-      "precision_qty": 1
+      "precision_qty": 1,
+      "leverage_brackets": [
+        {
+          "bracket": 1,
+          "initialLeverage": 75,
+          "notionalCap": 20000,
+          "notionalFloor": 0,
+          "maintMarginRatio": 0.01,
+          "cum": 0.0
+        },
+        {
+          "bracket": 2,
+          "initialLeverage": 50,
+          "notionalCap": 200000,
+          "notionalFloor": 20000,
+          "maintMarginRatio": 0.015,
+          "cum": 100.0
+        },
+        {
+          "bracket": 3,
+          "initialLeverage": 25,
+          "notionalCap": 1000000,
+          "notionalFloor": 200000,
+          "maintMarginRatio": 0.02,
+          "cum": 1100.0
+        },
+        {
+          "bracket": 4,
+          "initialLeverage": 20,
+          "notionalCap": 2000000,
+          "notionalFloor": 1000000,
+          "maintMarginRatio": 0.025,
+          "cum": 6100.0
+        },
+        {
+          "bracket": 5,
+          "initialLeverage": 10,
+          "notionalCap": 5000000,
+          "notionalFloor": 2000000,
+          "maintMarginRatio": 0.05,
+          "cum": 56100.0
+        },
+        {
+          "bracket": 6,
+          "initialLeverage": 5,
+          "notionalCap": 7500000,
+          "notionalFloor": 5000000,
+          "maintMarginRatio": 0.1,
+          "cum": 306100.0
+        },
+        {
+          "bracket": 7,
+          "initialLeverage": 4,
+          "notionalCap": 10000000,
+          "notionalFloor": 7500000,
+          "maintMarginRatio": 0.125,
+          "cum": 493600.0
+        },
+        {
+          "bracket": 8,
+          "initialLeverage": 2,
+          "notionalCap": 12500000,
+          "notionalFloor": 10000000,
+          "maintMarginRatio": 0.25,
+          "cum": 1743600.0
+        },
+        {
+          "bracket": 9,
+          "initialLeverage": 1,
+          "notionalCap": 15000000,
+          "notionalFloor": 12500000,
+          "maintMarginRatio": 0.5,
+          "cum": 4868600.0
+        }
+      ]
     }
   }
 }

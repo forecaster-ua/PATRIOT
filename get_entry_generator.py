@@ -12,10 +12,18 @@ class SignalProcessor:
 
     def get_signals(self) -> Dict[str, Optional[Dict]]:
         """Получаем сигналы для всех таймфреймов"""
-        return {
-            tf: api_client.get_signal(self.ticker, tf)
-            for tf in self.timeframes
-        }
+        signals = {}
+        for tf in self.timeframes:
+            result = api_client.get_signal(self.ticker, tf)
+            signals[tf] = result
+            # Печатаем полный адрес запроса, если ответ получен
+            if result is not None:
+                # Формируем адрес так же, как в api_client.py
+                base_url = getattr(api_client, 'base_url', None)
+                if base_url:
+                    full_url = f"{base_url}/signal?pair={self.ticker}&timeframe={tf}"
+                    print(f"Ответ получен от: {full_url}")
+        return signals
 
     @staticmethod
     def check_price_proximity(price1: float, price2: float, threshold: float) -> bool:
@@ -58,6 +66,7 @@ class SignalProcessor:
             'entry_price': round(avg_price, 6),
             'stop_loss': round(mean([signals[tf]['stop_loss'] for tf in matched_tfs]), 6),  
             'take_profit': round(mean([signals[tf]['take_profit'] for tf in matched_tfs]), 6),  
+            'risk_reward': round(mean([signals[tf]['risk_reward'] for tf in matched_tfs]), 2),
             'confidence': mean([signals[tf]['confidence'] for tf in matched_tfs]) / 100,  
             'dominance_change_percent': mean(
                 [signals[tf].get('dominance_change_percent', 0) 
@@ -105,7 +114,10 @@ class SignalProcessor:
             print(f"Средняя цена входа: {execution_signal['entry_price']:.6f}")
             print(f"Stop Loss: {execution_signal['stop_loss']:.6f}")
             print(f"Take Profit: {execution_signal['take_profit']:.6f}")
+            print(f"Risk/Reward Ratio: {execution_signal['risk_reward']:.2f}")
             
+
+
             # Здесь можно добавить вызов функции для исполнения ордера
             # execute_order(order)
 

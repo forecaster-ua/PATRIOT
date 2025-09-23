@@ -120,6 +120,35 @@ if [ "$WATCHDOG_RUNNING" = false ]; then
     log_warning "Continuing WITHOUT Orders Watchdog..."
 fi
 
+# Синхронизация состояния перед запуском (если Watchdog работает)
+if [ "$WATCHDOG_RUNNING" = true ]; then
+    echo ""
+    echo -e "${BLUE}🔄 Synchronizing system state...${NC}"
+
+    python3 -c "
+from unified_sync import sync_before_startup
+success = sync_before_startup('ticker_monitor')
+if not success:
+    exit(1)
+    "
+
+    if [ $? -ne 0 ]; then
+        log_error "State synchronization failed!"
+        echo ""
+        echo -e "${YELLOW}Cannot start Ticker Monitor with unsynchronized state${NC}"
+        echo -e "${CYAN}Run: ${GREEN}python3 unified_sync.py --force${NC}"
+        echo ""
+        read -p "Continue with unsynchronized state? (y/N): " -n 1 -r
+        echo ""
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            exit 1
+        fi
+        log_warning "Starting with unsynchronized state..."
+    else
+        log_info "System state synchronized successfully"
+    fi
+fi
+
 # Файлы для PID процессов
 TICKER_PID_FILE="ticker_monitor.pid"
 

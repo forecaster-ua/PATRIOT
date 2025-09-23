@@ -27,6 +27,11 @@ from typing import Dict, List, Optional, Set, Tuple, Any, Union
 from pathlib import Path
 from dataclasses import dataclass, asdict
 from enum import Enum
+import logging
+
+# Логгер для трейлинга
+trailing_logger = logging.getLogger("trailing_logger")
+trailing_logger.setLevel(logging.DEBUG)
 
 # Локальные импорты
 from config import (
@@ -34,8 +39,19 @@ from config import (
     FUTURES_LEVERAGE, FUTURES_MARGIN_TYPE
 )
 from utils import logger
+from symbol_cache import round_price_for_symbol
 from telegram_bot import telegram_bot
 from symbol_cache import round_price_for_symbol, round_quantity_for_symbol
+
+# Импорт системы восстановления состояния
+try:
+    from unified_sync import UnifiedSynchronizer, SystemState
+    STATE_RECOVERY_AVAILABLE = True
+except ImportError:
+    logger.warning("⚠️ state_recovery module not available")
+    STATE_RECOVERY_AVAILABLE = False
+    UnifiedSynchronizer = None
+    SystemState = None
 
 # Binance - создаем типы для правильной работы с Pylance
 from typing import TYPE_CHECKING
@@ -81,7 +97,7 @@ class OrderStatus(Enum):
 
 @dataclass
 class WatchedOrder:
-    """Отслеживаемый ордер"""
+    """Отслеживаемый ордер с жизненным циклом"""
     symbol: str
     order_id: str
     side: str  # BUY/SELL
@@ -97,12 +113,16 @@ class WatchedOrder:
     sl_order_id: Optional[str] = None
     tp_order_id: Optional[str] = None
     sl_tp_attempts: int = 0  # Счетчик попыток размещения SL/TP
+    expires_at: Optional[datetime] = None  # Время истечения ордера
+    source_timeframe: str = "4h"  # Таймфрейм источника сигнала
+    trailing_triggered: bool = False  # Флаг срабатывания трейлинга 80/80/50
     
     def to_dict(self) -> Dict[str, Any]:
         """Конвертация в словарь для JSON"""
         data = asdict(self)
         data['created_at'] = self.created_at.isoformat()
         data['filled_at'] = self.filled_at.isoformat() if self.filled_at else None
+        data['expires_at'] = self.expires_at.isoformat() if self.expires_at else None
         data['status'] = self.status.value
         return data
     
@@ -113,11 +133,54 @@ class WatchedOrder:
         data['filled_at'] = datetime.fromisoformat(data['filled_at']) if data['filled_at'] else None
         data['status'] = OrderStatus(data['status'])
         
-        # Обеспечиваем обратную совместимость для sl_tp_attempts
+        # Обеспечиваем обратную совместимость для новых полей
         if 'sl_tp_attempts' not in data:
             data['sl_tp_attempts'] = 0
+        if 'expires_at' not in data:
+            data['expires_at'] = None
+        elif data['expires_at']:
+            data['expires_at'] = datetime.fromisoformat(data['expires_at'])
+        if 'source_timeframe' not in data:
+            data['source_timeframe'] = "4h"
+        if 'trailing_triggered' not in data:
+            data['trailing_triggered'] = False
             
         return cls(**data)
+    
+    def calculate_expiry_time(self) -> datetime:
+        """
+        Рассчитывает время истечения ордера привязанного к 4h таймфрейму
+        
+        Логика:
+        - Ордер создан в 01:23:56 → истекает в 04:00:00 (если не исполнен)
+        - Ордер исполнен в 06:56:37 → SL/TP истекают в 08:00:00 (после закрытия позиции)
+        """
+        # 4h интервалы: 00:00, 04:00, 08:00, 12:00, 16:00, 20:00
+        current_time = self.filled_at if self.filled_at else self.created_at
+        
+        # Находим следующий 4h интервал
+        current_hour = current_time.hour
+        next_4h_hour = ((current_hour // 4) + 1) * 4
+        
+        # Если превышает 24 часа, переходим на следующий день
+        if next_4h_hour >= 24:
+            next_day = current_time.date() + timedelta(days=1)
+            return datetime.combine(next_day, datetime.min.time())
+        else:
+            return current_time.replace(hour=next_4h_hour, minute=0, second=0, microsecond=0)
+    
+    def is_expired(self) -> bool:
+        """Проверяет истек ли ордер"""
+        if not self.expires_at:
+            return False
+        return datetime.now() > self.expires_at
+    
+    def should_expire_soon(self, minutes_before: int = 15) -> bool:
+        """Проверяет истекает ли ордер в ближайшие N минут"""
+        if not self.expires_at:
+            return False
+        time_to_expiry = self.expires_at - datetime.now()
+        return time_to_expiry.total_seconds() <= (minutes_before * 60)
 
 
 class OrdersWatchdog:
@@ -135,6 +198,7 @@ class OrdersWatchdog:
         # Инициализация
         self._init_client()
         self._load_persistent_state()
+        self._sync_with_exchange_on_startup()
         self._setup_signal_handlers()
         
         logger.info("🐕 Orders Watchdog initialized")
@@ -209,6 +273,139 @@ class OrdersWatchdog:
         except Exception as e:
             logger.error(f"❌ Ошибка сохранения состояния: {e}")
     
+    def _sync_with_exchange_on_startup(self) -> None:
+        """Полная синхронизация с биржей при запуске - восстанавливает ордера и анализирует позиции"""
+        if not self.client:
+            logger.warning("⚠️ Нет подключения к бирже - синхронизация пропущена")
+            return
+        
+        try:
+            logger.info("🔄 Полная синхронизация с биржей при запуске...")
+            
+            # НОВОЕ: Запускаем полное восстановление состояния
+            if STATE_RECOVERY_AVAILABLE and UnifiedSynchronizer is not None:
+                logger.info("📊 Запуск системы восстановления состояния...")
+                state_manager = UnifiedSynchronizer()
+                system_state = state_manager.recover_system_state()
+                
+                # Отправляем отчет о восстановленном состоянии
+                self._send_state_recovery_report(system_state)
+                
+                # Если есть проблемы синхронизации, уведомляем
+                if system_state.synchronization_issues:
+                    issues_text = "\n".join(system_state.synchronization_issues)
+                    self._send_watchdog_notification(
+                        f"⚠️ ОБНАРУЖЕНЫ ПРОБЛЕМЫ СИНХРОНИЗАЦИИ:\n{issues_text}"
+                    )
+            else:
+                logger.warning("⚠️ State Recovery недоступен - используем базовую синхронизацию")
+            
+            # СУЩЕСТВУЮЩАЯ ЛОГИКА: Восстановление ордеров
+            open_orders = self.client.futures_get_open_orders()
+            
+            if not open_orders:
+                logger.info("📋 Открытых ордеров на бирже не найдено")
+                return
+            
+            synced_count = 0
+            skipped_count = 0
+            
+            for order_info in open_orders:
+                order_id = str(order_info['orderId'])
+                symbol = order_info['symbol']
+                
+                # Проверяем, уже ли отслеживается этот ордер
+                if order_id in self.watched_orders:
+                    logger.debug(f"🔄 Ордер {order_id} ({symbol}) уже отслеживается")
+                    skipped_count += 1
+                    continue
+                
+                # Проверяем тип ордера - нас интересуют только LIMIT ордера
+                if order_info.get('type') != 'LIMIT':
+                    logger.debug(f"⏭️ Пропускаем ордер {order_id} - тип {order_info.get('type')}")
+                    skipped_count += 1
+                    continue
+                
+                # Попытка восстановить ордер для отслеживания
+                try:
+                    self._restore_order_from_exchange(order_info)
+                    synced_count += 1
+                    logger.info(f"✅ Восстановлен ордер {symbol} #{order_id}")
+                except Exception as e:
+                    logger.warning(f"⚠️ Не удалось восстановить ордер {order_id}: {e}")
+                    skipped_count += 1
+            
+            if synced_count > 0:
+                logger.info(f"📊 Синхронизация завершена: восстановлено {synced_count}, пропущено {skipped_count}")
+                self._save_persistent_state()
+                
+                # Отправляем уведомление
+                if synced_count > 0:
+                    self._send_watchdog_notification(
+                        f"🔄 При запуске восстановлено {synced_count} ордеров с биржи"
+                    )
+            else:
+                logger.info("📋 Новых ордеров для восстановления не найдено")
+                
+        except Exception as e:
+            logger.error(f"❌ Ошибка синхронизации с биржей: {e}")
+    
+    def _restore_order_from_exchange(self, order_info: Dict[str, Any]) -> None:
+        """Восстанавливает ордер из информации с биржи"""
+        try:
+            symbol = order_info['symbol']
+            order_id = str(order_info['orderId'])
+            side = order_info['side']  # BUY/SELL
+            position_side = order_info.get('positionSide', 'BOTH')
+            quantity = float(order_info['origQty'])
+            price = float(order_info['price'])
+            
+            # Пытаемся определить signal_type из positionSide
+            if position_side == 'LONG':
+                signal_type = 'LONG'
+            elif position_side == 'SHORT':
+                signal_type = 'SHORT'
+            else:
+                # Fallback: определяем по side
+                signal_type = 'LONG' if side == 'BUY' else 'SHORT'
+            
+            # Для восстановленных ордеров используем базовые значения SL/TP
+            # Их можно будет скорректировать вручную при необходимости
+            if signal_type == 'LONG':
+                stop_loss = price * 0.97  # -3%
+                take_profit = price * 1.05  # +5%
+            else:
+                stop_loss = price * 1.03  # +3%
+                take_profit = price * 0.95  # -5%
+            
+            # Создаем восстановленный ордер с жизненным циклом
+            restored_order = WatchedOrder(
+                symbol=symbol,
+                order_id=order_id,
+                side=side,
+                position_side=position_side,
+                quantity=quantity,
+                price=price,
+                signal_type=signal_type,
+                stop_loss=stop_loss,
+                take_profit=take_profit,
+                status=OrderStatus.PENDING,
+                created_at=datetime.now(),  # Время восстановления
+                source_timeframe="4h"  # По умолчанию для восстановленных
+            )
+            
+            # Устанавливаем время истечения
+            restored_order.expires_at = restored_order.calculate_expiry_time()
+            
+            with self.lock:
+                self.watched_orders[order_id] = restored_order
+            
+            logger.info(f"🔄 Восстановлен {symbol} ордер #{order_id} ({signal_type}, истекает: {restored_order.expires_at.strftime('%H:%M:%S')})")
+            
+        except Exception as e:
+            logger.error(f"❌ Ошибка восстановления ордера: {e}")
+            raise
+    
     def add_order_to_watch(self, order_data: Dict[str, Any]) -> bool:
         """
         Добавляет ордер для отслеживания
@@ -227,6 +424,7 @@ class OrdersWatchdog:
             }
         """
         try:
+            # Создаем ордер с автоматическим расчетом времени истечения
             order = WatchedOrder(
                 symbol=order_data['symbol'],
                 order_id=str(order_data['order_id']),
@@ -238,14 +436,18 @@ class OrdersWatchdog:
                 stop_loss=float(order_data['stop_loss']),
                 take_profit=float(order_data['take_profit']),
                 status=OrderStatus.PENDING,
-                created_at=datetime.now()
+                created_at=datetime.now(),
+                source_timeframe=order_data.get('timeframe', '4h')  # Получаем из данных или по умолчанию
             )
+            
+            # Устанавливаем время истечения
+            order.expires_at = order.calculate_expiry_time()
             
             with self.lock:
                 self.watched_orders[order.order_id] = order
                 self._save_persistent_state()
             
-            logger.info(f"👁️ Добавлен в отслеживание: {order.symbol} ордер {order.order_id}")
+            logger.info(f"👁️ Добавлен в отслеживание: {order.symbol} ордер {order.order_id} (истекает: {order.expires_at.strftime('%H:%M:%S')})")
             self._send_watchdog_notification(f"👁️ Начал отслеживание ордера {order.symbol} #{order.order_id}")
             
             return True
@@ -352,9 +554,12 @@ class OrdersWatchdog:
             logger.error(f"❌ Ошибка обработки входящих запросов: {e}")
     
     def check_orders_status(self) -> None:
-        """Проверяет статус всех отслеживаемых ордеров"""
+        """Проверяет статус всех отслеживаемых ордеров и очищает истекшие"""
         if not self.client:
             return
+        
+        # 1. Сначала проверяем и очищаем истекшие ордера
+        self._cleanup_expired_orders()
         
         with self.lock:
             orders_to_check = list(self.watched_orders.values())
@@ -365,12 +570,25 @@ class OrdersWatchdog:
         logger.debug(f"🔍 Проверяем {len(orders_to_check)} ордеров...")
         
         for order in orders_to_check:
+            # Проверяем истечение перед обработкой
+            if order.is_expired() and order.status == OrderStatus.PENDING:
+                logger.info(f"⏰ Ордер {order.symbol} #{order.order_id} истек - отменяем")
+                self._handle_expired_order(order)
+                continue
+                
+            # Уведомляем о скором истечении
+            if order.should_expire_soon(15) and order.status == OrderStatus.PENDING:
+                logger.warning(f"⚠️ Ордер {order.symbol} #{order.order_id} истекает через 15 минут")
+            
             if order.status == OrderStatus.PENDING:
                 self._check_single_order(order)
             elif order.status == OrderStatus.FILLED:
                 self._handle_filled_order(order)
             elif order.status == OrderStatus.SL_TP_PLACED:
                 self._check_sl_tp_orders(order)
+                # РАСШИРЕНИЕ: Проверяем трейлинг для всех активных позиций с SL/TP
+                if not order.trailing_triggered:
+                    self._check_trailing_conditions(order)
             elif order.status == OrderStatus.SL_TP_ERROR:
                 # Игнорируем ордера с ошибками SL/TP
                 continue
@@ -490,6 +708,10 @@ class OrdersWatchdog:
             return
             
         try:
+            # Проверяем трейлинг 80/80/50 перед проверкой SL/TP
+            if not order.trailing_triggered:
+                self._check_trailing_conditions(order)
+            
             sl_filled = False
             tp_filled = False
             sl_cancelled = False
@@ -581,6 +803,156 @@ class OrdersWatchdog:
             
         except Exception as e:
             logger.error(f"❌ Ошибка обработки исполнения SL/TP: {e}")
+    
+    def _check_trailing_conditions(self, order: WatchedOrder) -> None:
+        """
+        Проверяет условия для трейлинга 80/80/50
+        При достижении 80% пути к тейку:
+        - Закрывает 80% позиции  
+        - Переставляет стоп на entry ± 50% пути
+        """
+        if not self.client or order.trailing_triggered:
+            # TRAILING_LOG: Проверка базовых условий для трейлинга
+            trailing_logger.debug(f"🔍 {order.symbol} | Пропуск: client={bool(self.client)}, triggered={order.trailing_triggered}")
+            return
+            
+        try:
+            # TRAILING_LOG: Получение текущей цены с биржи
+            trailing_logger.debug(f"📡 {order.symbol} | Запрос текущей цены с биржи...")
+            ticker_data = self.client.futures_symbol_ticker(symbol=order.symbol)
+            current_price = float(ticker_data['price'])
+            
+            entry_price = order.price
+            stop_loss = order.stop_loss  
+            take_profit = order.take_profit
+            
+            # TRAILING_LOG: Базовые параметры позиции
+            trailing_logger.debug(f"💰 {order.symbol} | Entry: {entry_price:.6f} | Current: {current_price:.6f} | SL: {stop_loss:.6f} | TP: {take_profit:.6f}")
+            
+            # Рассчитываем расстояния
+            if order.signal_type == 'LONG':
+                # Для LONG: entry -> TP (вверх)
+                distance_to_tp = take_profit - entry_price
+                distance_traveled = current_price - entry_price
+                # Новый SL на entry + 50% пути вверх
+                new_sl_distance = distance_to_tp * 0.5
+                new_sl_price = entry_price + new_sl_distance
+            else:  # SHORT
+                # Для SHORT: entry -> TP (вниз)  
+                distance_to_tp = entry_price - take_profit
+                distance_traveled = entry_price - current_price
+                # Новый SL на entry - 50% пути вниз
+                new_sl_distance = distance_to_tp * 0.5  
+                new_sl_price = entry_price - new_sl_distance
+            
+            # TRAILING_LOG: Детальные расчеты движения цены
+            progress_percent = (distance_traveled / distance_to_tp * 100) if distance_to_tp > 0 else 0
+            trailing_logger.debug(f"📊 {order.symbol} | Направление: {order.signal_type}")
+            trailing_logger.debug(f"📏 {order.symbol} | Расстояние до TP: {distance_to_tp:.6f}")
+            trailing_logger.debug(f"🚶 {order.symbol} | Пройдено: {distance_traveled:.6f}")
+            trailing_logger.debug(f"📈 {order.symbol} | Прогресс: {progress_percent:.1f}% (цель: 80%)")
+            trailing_logger.debug(f"🎯 {order.symbol} | Новый SL будет: {new_sl_price:.6f}")
+                
+            # Проверяем достижение 80% пути к тейку
+            if distance_to_tp > 0 and distance_traveled >= (distance_to_tp * 0.8):
+                # TRAILING_LOG: Срабатывание трейлинга
+                trailing_logger.info(f"🎯 {order.symbol} | ТРЕЙЛИНГ АКТИВИРОВАН! Прогресс: {progress_percent:.1f}%")
+                
+                # Получаем текущую позицию
+                # TRAILING_LOG: Запрос информации о позиции
+                trailing_logger.debug(f"📍 {order.symbol} | Получение информации о позиции...")
+                positions = self.client.futures_position_information(symbol=order.symbol)
+                current_position_size = 0
+                for pos in positions:
+                    if pos['positionSide'] == order.position_side:
+                        current_position_size = abs(float(pos['positionAmt']))
+                        # TRAILING_LOG: Найденная позиция
+                        trailing_logger.debug(f"💼 {order.symbol} | Позиция найдена: {current_position_size} ({pos['positionSide']})")
+                        break
+                
+                if current_position_size > 0:
+                    # 1. Закрываем 80% позиции
+                    close_quantity = round(current_position_size * 0.8, 6)
+                    close_side = 'SELL' if order.signal_type == 'LONG' else 'BUY'
+                    
+                    # TRAILING_LOG: Подготовка к закрытию 80% позиции
+                    trailing_logger.info(f"📤 {order.symbol} | Закрытие 80% позиции: {close_quantity} из {current_position_size}")
+                    trailing_logger.debug(f"🔄 {order.symbol} | Ордер на закрытие: {close_side} {close_quantity}")
+                    
+                    close_order = self.client.futures_create_order(
+                        symbol=order.symbol,
+                        side=close_side,
+                        type='MARKET',
+                        quantity=str(close_quantity),
+                        positionSide=order.position_side
+                    )
+                    
+                    # TRAILING_LOG: Успешное закрытие 80%
+                    trailing_logger.info(f"✅ {order.symbol} | 80% позиции закрыто, ордер ID: {close_order.get('orderId')}")
+                    
+                    # 2. Обновляем SL на entry + 50% пути
+                    if order.sl_order_id:
+                        # Отменяем старый SL
+                        try:
+                            # TRAILING_LOG: Отмена старого SL
+                            trailing_logger.debug(f"🚫 {order.symbol} | Отмена старого SL: {order.sl_order_id}")
+                            self.client.futures_cancel_order(
+                                symbol=order.symbol,
+                                orderId=order.sl_order_id
+                            )
+                            trailing_logger.debug(f"✅ {order.symbol} | Старый SL отменен")
+                        except Exception as e:
+                            # TRAILING_LOG: Ошибка отмены SL
+                            trailing_logger.warning(f"⚠️ {order.symbol} | Не удалось отменить старый SL: {e}")
+                    
+                    # Размещаем новый SL
+                    new_sl_side = 'SELL' if order.signal_type == 'LONG' else 'BUY'
+                    remaining_quantity = current_position_size - close_quantity
+                    rounded_sl_price = round_price_for_symbol(order.symbol, new_sl_price)
+                    
+                    # TRAILING_LOG: Подготовка нового SL
+                    trailing_logger.info(f"🛡️ {order.symbol} | Новый SL: {new_sl_side} {remaining_quantity} @ {rounded_sl_price:.6f}")
+                    
+                    new_sl_order = self.client.futures_create_order(
+                        symbol=order.symbol,
+                        side=new_sl_side,
+                        type='STOP_MARKET', 
+                        quantity=str(remaining_quantity),
+                        stopPrice=str(rounded_sl_price),
+                        positionSide=order.position_side
+                    )
+                    
+                    # Обновляем данные ордера
+                    with self.lock:
+                        order.trailing_triggered = True
+                        order.sl_order_id = new_sl_order['orderId']
+                        order.stop_loss = rounded_sl_price
+                        self._save_persistent_state()
+                    
+                    # TRAILING_LOG: Финальные результаты трейлинга
+                    trailing_logger.info(f"🎉 {order.symbol} | ТРЕЙЛИНГ ЗАВЕРШЕН!")
+                    trailing_logger.info(f"📊 {order.symbol} | 80% закрыто: {close_quantity}")
+                    trailing_logger.info(f"🛡️ {order.symbol} | Новый SL ID: {new_sl_order['orderId']}")
+                    trailing_logger.info(f"💰 {order.symbol} | SL цена: {rounded_sl_price:.6f} (было {stop_loss:.6f})")
+                    
+                    logger.info(f"🔄 Новый SL установлен для {order.symbol} на {rounded_sl_price:.6f}")
+                    
+                    # Отправляем уведомление
+                    self._send_trailing_notification(order, close_quantity, rounded_sl_price)
+                else:
+                    # TRAILING_LOG: Позиция не найдена
+                    trailing_logger.warning(f"❌ {order.symbol} | Позиция не найдена для трейлинга")
+            else:
+                # TRAILING_LOG: Условия трейлинга не достигнуты
+                if distance_to_tp <= 0:
+                    trailing_logger.debug(f"⚠️ {order.symbol} | Некорректное расстояние до TP: {distance_to_tp}")
+                else:
+                    trailing_logger.debug(f"⏳ {order.symbol} | Трейлинг НЕ активен: {progress_percent:.1f}% < 80%")
+                        
+        except Exception as e:
+            # TRAILING_LOG: Критические ошибки
+            trailing_logger.error(f"❌ {order.symbol} | ОШИБКА трейлинга: {e}")
+            logger.error(f"❌ Ошибка проверки трейлинга для {order.symbol}: {e}")
     
     def _handle_cancelled_sl_order(self, order: WatchedOrder) -> None:
         """Обрабатывает отмененный SL ордер - пытается восстановить защиту"""
@@ -695,6 +1067,7 @@ class OrdersWatchdog:
                     with self.lock:
                         order.sl_order_id = new_sl_order_id
                         order.tp_order_id = new_tp_order_id
+                        order.status = OrderStatus.SL_TP_PLACED
                         self._save_persistent_state()
                     
                     logger.info(f"✅ SL/TP восстановлены для {order.symbol}: SL={new_sl_order_id}, TP={new_tp_order_id}")
@@ -802,7 +1175,7 @@ class OrdersWatchdog:
             elif 'stopPrice' in filled_order_info and filled_order_info['stopPrice']:
                 exit_price = float(filled_order_info['stopPrice'])
             else:
-                # Если цену получить не удалось, используем плановую цену
+                # Если цену получить не удалось, используй плановую цену
                 exit_price = order.stop_loss if is_stop_loss else order.take_profit
                 logger.warning(f"⚠️ Не удалось получить цену исполнения, использую плановую: {exit_price}")
             
@@ -952,22 +1325,38 @@ class OrdersWatchdog:
             return False, None
             
         try:
+            # Определяем сторону для закрытия позиции (противоположную открытию)
             tp_side = 'SELL' if order.signal_type == 'LONG' else 'BUY'
             tp_price = round_price_for_symbol(order.symbol, order.take_profit)
             
-            logger.info(f"🎯 Размещаем LIMIT {tp_side} для {order.symbol}: {order.quantity} at {tp_price}")
+            logger.info(f"🎯 Размещаем TAKE_PROFIT_MARKET {tp_side} для {order.symbol}: {order.quantity} at {tp_price}")
             
+            # ИСПРАВЛЕНО: используем TAKE_PROFIT_MARKET для корректного закрытия позиции в Hedge Mode
             tp_order = self.client.futures_create_order(
                 symbol=order.symbol,
                 side=tp_side,
-                type='LIMIT',
+                type='TAKE_PROFIT_MARKET',  # ✅ ИСПРАВЛЕНО: правильный тип для закрытия позиции
                 quantity=order.quantity,
-                price=str(tp_price),
+                stopPrice=str(tp_price),    # ✅ ИСПРАВЛЕНО: используем stopPrice для триггера
                 timeInForce='GTC',
-                positionSide=order.position_side
+                positionSide=order.position_side  # ✅ Указываем какую позицию закрываем
             )
             
             logger.info(f"✅ Take Profit размещен: {tp_order['orderId']}")
+            
+            # ОТЛАДКА: Проверяем что ордер корректно создался
+            try:
+                order_check = self.client.futures_get_order(
+                    symbol=order.symbol,
+                    orderId=tp_order['orderId']
+                )
+                logger.info(f"🔍 TP ордер проверка: type={order_check.get('type')}, "
+                          f"side={order_check.get('side')}, "
+                          f"positionSide={order_check.get('positionSide')}, "
+                          f"status={order_check.get('status')}")
+            except Exception as debug_e:
+                logger.warning(f"⚠️ Не удалось проверить TP ордер: {debug_e}")
+            
             return True, str(tp_order['orderId'])
             
         except Exception as e:
@@ -984,9 +1373,61 @@ class OrdersWatchdog:
 
 ⏰ {datetime.now().strftime('%H:%M:%S')}
 """
-            telegram_bot.send_message(full_message)
+            # DISABLED: Telegram spam reduction - служебные уведомления watchdog отключены
+            # telegram_bot.send_message(full_message)
+            logger.info(f"📱 Watchdog уведомление (отключено): {message}")
         except Exception as e:
             logger.error(f"❌ Ошибка отправки watchdog уведомления: {e}")
+    
+    def _send_state_recovery_report(self, system_state) -> None:
+        """Отправляет отчет о восстановлении состояния системы"""
+        if not system_state:
+            return
+            
+        try:
+            positions_count = len(system_state.active_positions)
+            issues_count = len(system_state.synchronization_issues)
+            
+            # Краткая статистика по позициям
+            positions_summary = ""
+            if positions_count > 0:
+                for symbol, position in list(system_state.active_positions.items())[:3]:  # Первые 3
+                    pnl_str = f"{position.unrealized_pnl:+.2f}" if position.unrealized_pnl != 0 else "0.00"
+                    sl_status = "✅ SL" if position.has_sl else "❌ No SL"
+                    tp_status = "✅ TP" if position.has_tp else "❌ No TP"
+                    positions_summary += f"• {symbol}: {position.side} {position.size} (PnL: {pnl_str}) | {sl_status} | {tp_status}\n"
+                
+                if positions_count > 3:
+                    positions_summary += f"... и еще {positions_count - 3} позиций\n"
+            
+            # Формируем сообщение
+            sync_status = "✅ СИНХРОНИЗИРОВАНО" if system_state.is_synchronized else "⚠️ ЕСТЬ ПРОБЛЕМЫ"
+            
+            message = f"""
+🔄 <b>ВОССТАНОВЛЕНИЕ СОСТОЯНИЯ</b> 🔄
+
+📊 <b>Статус:</b> {sync_status}
+📍 <b>Активных позиций:</b> {positions_count}
+⚠️ <b>Проблем синхронизации:</b> {issues_count}
+
+"""
+            
+            if positions_count > 0:
+                message += f"<b>💼 АКТИВНЫЕ ПОЗИЦИИ:</b>\n{positions_summary}\n"
+            
+            if issues_count > 0:
+                issues_summary = "\n".join(system_state.synchronization_issues[:3])
+                if issues_count > 3:
+                    issues_summary += f"\n... и еще {issues_count - 3} проблем"
+                message += f"<b>⚠️ ПРОБЛЕМЫ:</b>\n{issues_summary}\n\n"
+            
+            message += f"⏰ {datetime.now().strftime('%H:%M:%S')}"
+            
+            telegram_bot.send_message(message)
+            logger.info(f"📱 Отправлен отчет о восстановлении состояния: {positions_count} позиций, {issues_count} проблем")
+            
+        except Exception as e:
+            logger.error(f"❌ Ошибка отправки отчета о восстановлении: {e}")
     
     def _send_order_filled_notification(self, order: WatchedOrder, order_info: Dict[str, Any]) -> None:
         """Уведомление об исполнении ордера"""
@@ -1007,7 +1448,9 @@ class OrdersWatchdog:
 
 ⏰ {datetime.now().strftime('%H:%M:%S')}
 """
-            telegram_bot.send_message(message)
+            # DISABLED: Telegram spam reduction - дублирует уведомление об открытии позиции
+            # telegram_bot.send_message(message)
+            logger.info(f"📱 Ордер исполнен (отключено): {order.symbol} {order.signal_type}")
             
         except Exception as e:
             logger.error(f"❌ Ошибка отправки уведомления об исполнении: {e}")
@@ -1025,7 +1468,9 @@ class OrdersWatchdog:
 
 ⏰ {datetime.now().strftime('%H:%M:%S')}
 """
-            telegram_bot.send_message(message)
+            # DISABLED: Telegram spam reduction - отмена ордеров не критична
+            # telegram_bot.send_message(message)
+            logger.info(f"📱 Ордер отменен (отключено): {order.symbol} {status}")
             
         except Exception as e:
             logger.error(f"❌ Ошибка отправки уведомления об отмене: {e}")
@@ -1054,7 +1499,9 @@ class OrdersWatchdog:
 
 ⏰ {datetime.now().strftime('%H:%M:%S')}
 """
-            telegram_bot.send_message(message)
+            # DISABLED: Telegram spam reduction - дублирует уведомление о размещении ордера
+            # telegram_bot.send_message(message)
+            logger.info(f"📱 Позиция открыта (отключено): {order.symbol} {order.signal_type}")
             
         except Exception as e:
             logger.error(f"❌ Ошибка отправки уведомления о позиции: {e}")
@@ -1099,8 +1546,9 @@ class OrdersWatchdog:
 
 ⏰ {datetime.now().strftime('%H:%M:%S')}
 """
-            telegram_bot.send_message(message)
-            logger.info(f"📱 Уведомление о восстановлении SL для {order.symbol}")
+            # DISABLED: Telegram spam reduction - автоматическое восстановление работает
+            # telegram_bot.send_message(message)
+            logger.info(f"📱 SL восстановлен (отключено): {order.symbol} SL={order.stop_loss:.6f}")
             
         except Exception as e:
             logger.error(f"❌ Ошибка отправки уведомления о восстановлении SL: {e}")
@@ -1146,8 +1594,9 @@ class OrdersWatchdog:
 
 ⏰ {datetime.now().strftime('%H:%M:%S')}
 """
-            telegram_bot.send_message(message)
-            logger.info(f"📱 Уведомление о восстановлении SL/TP для {order.symbol}")
+            # DISABLED: Telegram spam reduction - автоматическое восстановление работает
+            # telegram_bot.send_message(message)
+            logger.info(f"📱 SL/TP восстановлены (отключено): {order.symbol}")
             
         except Exception as e:
             logger.error(f"❌ Ошибка отправки уведомления о восстановлении SL/TP: {e}")
@@ -1169,7 +1618,9 @@ class OrdersWatchdog:
 
 ⏰ {datetime.now().strftime('%H:%M:%S')}
 """
-            telegram_bot.send_message(message)
+            # DISABLED: Telegram spam reduction - автоматическое восстановление работает
+            # telegram_bot.send_message(message)
+            logger.info(f"📱 TP восстановлен (отключено): {order.symbol} TP={order.take_profit:.6f}")
             logger.info(f"📱 Уведомление о восстановлении TP для {order.symbol}")
             
         except Exception as e:
@@ -1198,6 +1649,31 @@ class OrdersWatchdog:
             
         except Exception as e:
             logger.error(f"❌ Ошибка отправки уведомления о проблеме TP: {e}")
+    
+    def _send_trailing_notification(self, order: WatchedOrder, closed_quantity: float, new_sl_price: float) -> None:
+        """Отправляет уведомление о срабатывании трейлинга 80/80/50"""
+        try:
+            message = f"""
+📈 <b>ТРЕЙЛИНГ 80/80/50 СРАБОТАЛ</b> 📈
+
+💰 <b>Символ:</b> {order.symbol}
+🎯 <b>Тип:</b> {order.signal_type}
+
+✅ <b>Действия выполнены:</b>
+• Закрыто 80% позиции: {closed_quantity:.6f}
+• Новый SL установлен: {new_sl_price:.6f}
+• SL перемещен на entry + 50% пути
+
+💡 <b>Логика:</b> Цена достигла 80% пути к тейку
+🛡️ <b>Результат:</b> 80% прибыли зафиксировано, риск минимизирован
+
+⏰ {datetime.now().strftime('%H:%M:%S')}
+"""
+            
+            telegram_bot.send_message(message)
+            logger.info(f"📱 Уведомление о трейлинге {order.symbol} отправлено")
+        except Exception as e:
+            logger.error(f"❌ Ошибка отправки уведомления о трейлинге: {e}")
     
     def check_positions_status(self) -> None:
         """Проверяет открытые позиции и удаляет связанные ордера если позиция закрыта"""
@@ -1550,6 +2026,10 @@ class OrdersWatchdog:
                         'message': f'PENDING ордер {order_id} не найден на бирже'
                     })
                     sync_report["recommendations"].append(f'Проверить статус ордера {order_id} - возможно исполнен или отменен')
+                    # Remove from local tracking immediately
+                    if order_id in self.watched_orders:
+                        del self.watched_orders[order_id]
+                        logger.info(f"🧹 PENDING ордер {order_id} удален из локального отслеживания (не найден на бирже)")
         
         # Проверяем "лишние" ордера на бирже
         all_local_order_ids = set(local_orders.keys())
@@ -1662,84 +2142,23 @@ class OrdersWatchdog:
         
         for order in orders_to_cleanup:
             try:
-                # Проверяем основной ордер в истории
-                order_history = self.client.futures_get_order(
-                    symbol=order.symbol,
-                    orderId=order.order_id
-                )
-                
+                order_history = self._get_order_history(order)
+                if not order_history:
+                    continue
+                    
                 order_status = order_history['status']
                 logger.info(f"📋 {order.symbol} ордер {order.order_id}: {order_status}")
                 
-                # Если ордер был исполнен, но мы его не обработали
                 if order_status == 'FILLED':
-                    if order.status in [OrderStatus.PENDING, OrderStatus.FILLED, OrderStatus.SL_TP_PLACED, OrderStatus.SL_TP_ERROR]:
+                    if self._should_cleanup_filled_order(order):
+                        sl_tp_processed = self._process_sl_tp_for_cleanup(order)
                         
-                        # Проверяем есть ли еще позиция с этим точным количеством
-                        positions = self.client.futures_position_information(symbol=order.symbol)
-                        exact_position_exists = False
+                        if not sl_tp_processed:
+                            logger.info(f"📤 Позиция {order.symbol} закрыта извне")
+                            self._send_position_closed_externally_notification(order)
                         
-                        for pos in positions:
-                            if (pos['positionSide'] == order.position_side and 
-                                abs(float(pos['positionAmt']) - order.quantity) < 0.001):  # Учитываем погрешность округления
-                                exact_position_exists = True
-                                break
+                        orders_to_remove.append(order.order_id)
                         
-                        if not exact_position_exists:
-                            logger.warning(f"🧹 Ордер {order.symbol} #{order.order_id} исполнен, но позиции с количеством {order.quantity} нет")
-                            
-                            # Если есть SL/TP ордера - проверяем их статус тоже
-                            sl_tp_processed = False
-                            if order.sl_order_id or order.tp_order_id:
-                                logger.info(f"🔍 Проверяем SL/TP ордера для {order.symbol}...")
-                                
-                                # Проверяем SL
-                                if order.sl_order_id:
-                                    try:
-                                        sl_history = self.client.futures_get_order(
-                                            symbol=order.symbol,
-                                            orderId=order.sl_order_id
-                                        )
-                                        sl_status = sl_history['status']
-                                        logger.info(f"🛡️ SL статус: {sl_status}")
-                                        
-                                        if sl_status == 'FILLED':
-                                            logger.info(f"✅ SL исполнен - позиция закрыта через SL")
-                                            sl_tp_processed = True
-                                            # Рассчитываем P&L и отправляем уведомление
-                                            pnl = self._calculate_pnl(order, sl_history, is_stop_loss=True)
-                                            self._send_stop_loss_filled_notification(order, sl_history, pnl)
-                                            
-                                    except Exception as e:
-                                        logger.error(f"❌ Ошибка проверки SL: {e}")
-                                
-                                # Проверяем TP если SL не исполнен
-                                if not sl_tp_processed and order.tp_order_id:
-                                    try:
-                                        tp_history = self.client.futures_get_order(
-                                            symbol=order.symbol,
-                                            orderId=order.tp_order_id
-                                        )
-                                        tp_status = tp_history['status']
-                                        logger.info(f"🎯 TP статус: {tp_status}")
-                                        
-                                        if tp_status == 'FILLED':
-                                            logger.info(f"✅ TP исполнен - позиция закрыта через TP")
-                                            sl_tp_processed = True
-                                            # Рассчитываем P&L и отправляем уведомление
-                                            pnl = self._calculate_pnl(order, tp_history, is_stop_loss=False)
-                                            self._send_take_profit_filled_notification(order, tp_history, pnl)
-                                            
-                                    except Exception as e:
-                                        logger.error(f"❌ Ошибка проверки TP: {e}")
-                            
-                            # Если SL/TP не обработаны, отправляем уведомление о внешнем закрытии
-                            if not sl_tp_processed:
-                                logger.info(f"📤 Позиция {order.symbol} закрыта извне")
-                                self._send_position_closed_externally_notification(order)
-                            
-                            orders_to_remove.append(order.order_id)
-                            
                 elif order_status in ['CANCELED', 'REJECTED', 'EXPIRED']:
                     logger.info(f"🚫 Ордер {order.symbol} #{order.order_id} отменен/отклонен: {order_status}")
                     orders_to_remove.append(order.order_id)
@@ -1747,39 +2166,147 @@ class OrdersWatchdog:
             except Exception as e:
                 logger.error(f"❌ Ошибка проверки ордера {order.order_id}: {e}")
         
-        # Удаляем найденные ордера
-        if orders_to_remove:
-            with self.lock:
-                for order_id in orders_to_remove:
-                    if order_id in self.watched_orders:
-                        removed_order = self.watched_orders.pop(order_id)
-                        logger.info(f"🗑️ Удален из отслеживания: {removed_order.symbol} ордер {order_id}")
-                
-                self._save_persistent_state()
-            
-            logger.info(f"✅ Очищено {len(orders_to_remove)} завершенных ордеров")
-            
-            # Отправляем уведомление об очистке
-            if len(orders_to_remove) > 0:
-                self._send_cleanup_notification(len(orders_to_remove))
-        else:
-            logger.info("✅ Все ордера актуальны, очистка не требуется")
+        self._remove_processed_orders(orders_to_remove)
     
-    def _send_cleanup_notification(self, count: int) -> None:
-        """Уведомление об очистке завершенных ордеров"""
+    def _get_order_history(self, order: 'WatchedOrder') -> Optional[Dict[str, Any]]:
+        """Получает историю ордера с биржи"""
+        if not self.client:
+            return None
+            
+        try:
+            return self.client.futures_get_order(
+                symbol=order.symbol,
+                orderId=order.order_id
+            )
+        except Exception as e:
+            logger.error(f"❌ Ошибка получения истории ордера {order.order_id}: {e}")
+            return None
+    
+    def _should_cleanup_filled_order(self, order: 'WatchedOrder') -> bool:
+        """Проверяет, нужно ли очищать исполненный ордер"""
+        if not self.client:
+            return False
+            
+        if order.status not in [OrderStatus.PENDING, OrderStatus.FILLED, OrderStatus.SL_TP_PLACED, OrderStatus.SL_TP_ERROR]:
+            return False
+            
+        # Проверяем есть ли еще позиция с этим точным количеством
+        try:
+            positions = self.client.futures_position_information(symbol=order.symbol)
+            for pos in positions:
+                if (pos['positionSide'] == order.position_side and 
+                    abs(float(pos['positionAmt']) - order.quantity) < 0.001):  # Учитываем погрешность округления
+                    return False
+                    
+            logger.warning(f"🧹 Ордер {order.symbol} #{order.order_id} исполнен, но позиции с количеством {order.quantity} нет")
+            return True
+            
+        except Exception as e:
+            logger.error(f"❌ Ошибка проверки позиции для {order.symbol}: {e}")
+            return False
+    
+    def _process_sl_tp_for_cleanup(self, order: 'WatchedOrder') -> bool:
+        """Обрабатывает SL/TP ордера при очистке"""
+        if not (order.sl_order_id or order.tp_order_id):
+            return False
+            
+        logger.info(f"🔍 Проверяем SL/TP ордера для {order.symbol}...")
+        
+        # Проверяем SL
+        if order.sl_order_id:
+            sl_processed = self._check_sl_for_cleanup(order)
+            if sl_processed:
+                return True
+        
+        # Проверяем TP если SL не исполнен
+        if order.tp_order_id:
+            tp_processed = self._check_tp_for_cleanup(order)
+            if tp_processed:
+                return True
+                
+        return False
+    
+    def _check_sl_for_cleanup(self, order: 'WatchedOrder') -> bool:
+        """Проверяет SL ордер при очистке"""
+        if not self.client:
+            return False
+            
+        try:
+            sl_history = self.client.futures_get_order(
+                symbol=order.symbol,
+                orderId=order.sl_order_id
+            )
+            sl_status = sl_history['status']
+            logger.info(f"🛡️ SL статус: {sl_status}")
+            
+            if sl_status == 'CANCELED':
+                return True
+            elif sl_status == 'FILLED':
+                logger.info(f"✅ SL исполнен - позиция закрыта через SL")
+                pnl = self._calculate_pnl(order, sl_history, is_stop_loss=True)
+                self._send_stop_loss_filled_notification(order, sl_history, pnl)
+                return True
+                
+        except Exception as e:
+            logger.error(f"❌ Ошибка проверки SL: {e}")
+            
+        return False
+    
+    def _check_tp_for_cleanup(self, order: 'WatchedOrder') -> bool:
+        """Проверяет TP ордер при очистке"""
+        if not self.client:
+            return False
+            
+        try:
+            tp_history = self.client.futures_get_order(
+                symbol=order.symbol,
+                orderId=order.tp_order_id
+            )
+            tp_status = tp_history['status']
+            logger.info(f"🎯 TP статус: {tp_status}")
+            
+            if tp_status == 'CANCELED':
+                return True
+            elif tp_status == 'FILLED':
+                logger.info(f"✅ TP исполнен - позиция закрыта через TP")
+                pnl = self._calculate_pnl(order, tp_history, is_stop_loss=False)
+                self._send_take_profit_filled_notification(order, tp_history, pnl)
+                return True
+                
+        except Exception as e:
+            logger.error(f"❌ Ошибка проверки TP: {e}")
+            
+        return False
+    
+    def _remove_processed_orders(self, orders_to_remove: List[str]) -> None:
+        """Удаляет обработанные ордера из отслеживания"""
+        if not orders_to_remove:
+            logger.info("✅ Все ордера актуальны, очистка не требуется")
+            return
+            
+        with self.lock:
+            for order_id in orders_to_remove:
+                if order_id in self.watched_orders:
+                    removed_order = self.watched_orders.pop(order_id)
+                    logger.info(f"🗑️ Удален из отслеживания: {removed_order.symbol} ордер {order_id}")
+            
+            self._save_persistent_state()
+        
+        logger.info(f"✅ Очищено {len(orders_to_remove)} завершенных ордеров")
+        self._send_cleanup_notification(len(orders_to_remove))
+        
+    def _send_cleanup_notification(self, cleaned_count: int) -> None:
+        """Отправляет уведомление об очистке завершённых ордеров"""
         try:
             message = f"""
-🧹 <b>ОЧИСТКА ЗАВЕРШЕНА</b> 🧹
+🧹 <b>ОЧИСТКА ОРДЕРОВ</b> 🧹
 
-Удалено {count} завершенных ордеров из отслеживания
-
-✅ Состояние синхронизировано с биржей
+✅ <b>Очищено завершённых ордеров:</b> {cleaned_count}
 
 ⏰ {datetime.now().strftime('%H:%M:%S')}
 """
             telegram_bot.send_message(message)
-            logger.info(f"📱 Уведомление об очистке {count} ордеров")
-            
+            logger.info(f"📱 Уведомление об очистке {cleaned_count} ордеров отправлено")
         except Exception as e:
             logger.error(f"❌ Ошибка отправки уведомления об очистке: {e}")
     
@@ -1806,125 +2333,8 @@ class OrdersWatchdog:
         try:
             logger.info(f"🔧 Исправляем десинхронизацию для {order.symbol} ордер {order_id}")
             
-            # Проверяем статус SL/TP ордеров
             if order.status == OrderStatus.SL_TP_PLACED:
-                sl_cancelled = False
-                tp_cancelled = False
-                sl_filled = False
-                tp_filled = False
-                sl_info = None
-                tp_info = None
-                
-                # Проверяем SL
-                if order.sl_order_id:
-                    try:
-                        sl_info = self.client.futures_get_order(
-                            symbol=order.symbol,
-                            orderId=order.sl_order_id
-                        )
-                        sl_status = sl_info['status']
-                        logger.info(f"🛡️ SL статус: {sl_status}")
-                        
-                        if sl_status == 'CANCELED':
-                            sl_cancelled = True
-                        elif sl_status == 'FILLED':
-                            sl_filled = True
-                            
-                    except Exception as e:
-                        logger.error(f"❌ Ошибка проверки SL: {e}")
-                
-                # Проверяем TP
-                if order.tp_order_id:
-                    try:
-                        tp_info = self.client.futures_get_order(
-                            symbol=order.symbol,
-                            orderId=order.tp_order_id
-                        )
-                        tp_status = tp_info['status']
-                        logger.info(f"🎯 TP статус: {tp_status}")
-                        
-                        if tp_status == 'CANCELED':
-                            tp_cancelled = True
-                        elif tp_status == 'FILLED':
-                            tp_filled = True
-                            
-                    except Exception as e:
-                        logger.error(f"❌ Ошибка проверки TP: {e}")
-                
-                # Проверяем позицию
-                positions = self.client.futures_position_information(symbol=order.symbol)
-                position_open = False
-                for pos in positions:
-                    if pos['positionSide'] == order.position_side and float(pos['positionAmt']) != 0:
-                        position_open = True
-                        break
-                
-                logger.info(f"📍 Позиция {order.symbol} {'открыта' if position_open else 'закрыта'}")
-                
-                # Принимаем решение об исправлении
-                if not position_open:
-                    # Позиция закрыта - удаляем из отслеживания
-                    logger.info(f"✅ Позиция закрыта, удаляем ордер {order_id} из отслеживания")
-                    self.remove_order_from_watch(order_id)
-                    self._send_position_closed_externally_notification(order)
-                    return True
-                    
-                elif sl_filled or tp_filled:
-                    # Один из ордеров исполнен - обрабатываем
-                    if sl_filled and sl_info:
-                        logger.info(f"✅ SL исполнен, обрабатываем закрытие позиции")
-                        self._handle_sl_tp_filled(order, sl_info, is_stop_loss=True)
-                    elif tp_filled and tp_info:
-                        logger.info(f"✅ TP исполнен, обрабатываем закрытие позиции")
-                        self._handle_sl_tp_filled(order, tp_info, is_stop_loss=False)
-                    return True
-                    
-                elif sl_cancelled and not tp_cancelled:
-                    # SL отменен, но TP активен - восстанавливаем SL
-                    logger.info(f"🔧 SL отменен, восстанавливаем защиту")
-                    self._handle_cancelled_sl_order(order)
-                    return True
-                    
-                elif tp_cancelled and not sl_cancelled:
-                    # TP отменен, но SL активен - восстанавливаем TP
-                    logger.info(f"🔧 TP отменен, восстанавливаем цель прибыли")
-                    tp_success, new_tp_id = self._place_take_profit(order)
-                    if tp_success and new_tp_id:
-                        with self.lock:
-                            order.tp_order_id = new_tp_id
-                            self._save_persistent_state()
-                        logger.info(f"✅ TP восстановлен: {new_tp_id}")
-                        return True
-                    else:
-                        logger.error(f"❌ Не удалось восстановить TP")
-                        return False
-                        
-                elif sl_cancelled and tp_cancelled:
-                    # Оба ордера отменены - позиция без защиты
-                    logger.warning(f"⚠️ Оба ордера отменены, позиция без защиты!")
-                    with self.lock:
-                        order.status = OrderStatus.SL_TP_ERROR
-                        self._save_persistent_state()
-                    
-                    # Пытаемся восстановить защиту
-                    sl_success, new_sl_id = self._place_stop_loss(order)
-                    tp_success, new_tp_id = self._place_take_profit(order)
-                    
-                    if sl_success and tp_success and new_sl_id and new_tp_id:
-                        with self.lock:
-                            order.sl_order_id = new_sl_id
-                            order.tp_order_id = new_tp_id
-                            order.status = OrderStatus.SL_TP_PLACED
-                            self._save_persistent_state()
-                        logger.info(f"✅ Защита полностью восстановлена: SL={new_sl_id}, TP={new_tp_id}")
-                        return True
-                    else:
-                        logger.error(f"❌ Не удалось восстановить полную защиту")
-                        return False
-                else:
-                    logger.info(f"✅ Ордер синхронизирован, никаких действий не требуется")
-                    return True
-                    
+                return self._fix_sl_tp_desync(order)
             else:
                 logger.info(f"📋 Ордер в статусе {order.status.value}, проверяем обычным способом")
                 return True
@@ -1933,6 +2343,243 @@ class OrdersWatchdog:
             logger.error(f"❌ Ошибка исправления десинхронизации: {e}")
             return False
     
+    def _fix_sl_tp_desync(self, order: 'WatchedOrder') -> bool:
+        """Исправляет десинхронизацию для ордеров со статусом SL_TP_PLACED"""
+        sl_status_info = self._get_sl_status(order)
+        tp_status_info = self._get_tp_status(order)
+        position_open = self._is_position_open(order)
+        
+        logger.info(f"📍 Позиция {order.symbol} {'открыта' if position_open else 'закрыта'}")
+        
+        # Позиция закрыта - удаляем из отслеживания
+        if not position_open:
+            logger.info(f"✅ Позиция закрыта, удаляем ордер {order.order_id} из отслеживания")
+            self.remove_order_from_watch(order.order_id)
+            self._send_position_closed_externally_notification(order)
+            return True
+        
+        # SL или TP исполнен
+        if sl_status_info['filled'] or tp_status_info['filled']:
+            return self._handle_filled_sl_tp(order, sl_status_info, tp_status_info)
+        
+        # Ордера отменены
+        if sl_status_info['cancelled'] or tp_status_info['cancelled']:
+            return self._handle_cancelled_sl_tp(order, sl_status_info, tp_status_info)
+        
+        logger.info(f"✅ Ордер синхронизирован, никаких действий не требуется")
+        return True
+    
+    def _get_sl_status(self, order: 'WatchedOrder') -> Dict[str, Any]:
+        """Получает статус SL ордера"""
+        status_info = {'filled': False, 'cancelled': False, 'info': None}
+        
+        if not self.client or not order.sl_order_id:
+            return status_info
+            
+        try:
+            sl_info = self.client.futures_get_order(
+                symbol=order.symbol,
+                orderId=order.sl_order_id
+            )
+            status_info['info'] = sl_info
+            sl_status = sl_info['status']
+            logger.info(f"🛡️ SL статус: {sl_status}")
+            
+            if sl_status == 'CANCELED':
+                status_info['cancelled'] = True
+            elif sl_status == 'FILLED':
+                status_info['filled'] = True
+                
+        except Exception as e:
+            logger.error(f"❌ Ошибка проверки SL: {e}")
+            
+        return status_info
+    
+    def _get_tp_status(self, order: 'WatchedOrder') -> Dict[str, Any]:
+        """Получает статус TP ордера"""
+        status_info = {'filled': False, 'cancelled': False, 'info': None}
+        
+        if not self.client or not order.tp_order_id:
+            return status_info
+            
+        try:
+            tp_info = self.client.futures_get_order(
+                symbol=order.symbol,
+                orderId=order.tp_order_id
+            )
+            status_info['info'] = tp_info
+            tp_status = tp_info['status']
+            logger.info(f"🎯 TP статус: {tp_status}")
+            
+            if tp_status == 'CANCELED':
+                status_info['cancelled'] = True
+            elif tp_status == 'FILLED':
+                status_info['filled'] = True
+                
+        except Exception as e:
+            logger.error(f"❌ Ошибка проверки TP: {e}")
+            
+        return status_info
+    
+    def _is_position_open(self, order: 'WatchedOrder') -> bool:
+        """Проверяет открыта ли позиция"""
+        if not self.client:
+            return False
+            
+        try:
+            positions = self.client.futures_position_information(symbol=order.symbol)
+            for pos in positions:
+                if pos['positionSide'] == order.position_side and float(pos['positionAmt']) != 0:
+                    return True
+            return False
+        except Exception as e:
+            logger.error(f"❌ Ошибка проверки позиции: {e}")
+            return False
+    
+    def _handle_filled_sl_tp(self, order: 'WatchedOrder', sl_info: Dict[str, Any], tp_info: Dict[str, Any]) -> bool:
+        """Обрабатывает исполненные SL/TP ордера"""
+        if sl_info['filled'] and sl_info['info']:
+            logger.info(f"✅ SL исполнен, обрабатываем закрытие позиции")
+            self._handle_sl_tp_filled(order, sl_info['info'], is_stop_loss=True)
+            return True
+        elif tp_info['filled'] and tp_info['info']:
+            logger.info(f"✅ TP исполнен, обрабатываем закрытие позиции")
+            self._handle_sl_tp_filled(order, tp_info['info'], is_stop_loss=False)
+            return True
+        return False
+    
+    def _handle_cancelled_sl_tp(self, order: 'WatchedOrder', sl_info: Dict[str, Any], tp_info: Dict[str, Any]) -> bool:
+        """Обрабатывает отмененные SL/TP ордера"""
+        sl_cancelled = sl_info['cancelled']
+        tp_cancelled = tp_info['cancelled']
+        
+        if sl_cancelled and not tp_cancelled:
+            logger.info(f"🔧 SL отменен, восстанавливаем защиту")
+            self._handle_cancelled_sl_order(order)
+            return True
+            
+        elif tp_cancelled and not sl_cancelled:
+            logger.info(f"🔧 TP отменен, восстанавливаем цель прибыли")
+            return self._restore_tp_order(order)
+            
+        elif sl_cancelled and tp_cancelled:
+            logger.warning(f"⚠️ Оба ордера отменены, позиция без защиты!")
+            return self._restore_both_orders(order)
+            
+        return True
+    
+    def _restore_tp_order(self, order: 'WatchedOrder') -> bool:
+        """Восстанавливает TP ордер"""
+        tp_success, new_tp_id = self._place_take_profit(order)
+        if tp_success and new_tp_id:
+            with self.lock:
+                order.tp_order_id = new_tp_id
+                self._save_persistent_state()
+            logger.info(f"✅ TP восстановлен: {new_tp_id}")
+            return True
+        else:
+            logger.error(f"❌ Не удалось восстановить TP")
+            return False
+    
+    def _restore_both_orders(self, order: 'WatchedOrder') -> bool:
+        """Восстанавливает оба ордера (SL и TP)"""
+        with self.lock:
+            order.status = OrderStatus.SL_TP_ERROR
+            self._save_persistent_state()
+        
+        sl_success, new_sl_id = self._place_stop_loss(order)
+        tp_success, new_tp_id = self._place_take_profit(order)
+        
+        if sl_success and tp_success and new_sl_id and new_tp_id:
+            with self.lock:
+                order.sl_order_id = new_sl_id
+                order.tp_order_id = new_tp_id
+                order.status = OrderStatus.SL_TP_PLACED
+                self._save_persistent_state()
+            logger.info(f"✅ Защита полностью восстановлена: SL={new_sl_id}, TP={new_tp_id}")
+            return True
+        else:
+            logger.error(f"❌ Не удалось восстановить полную защиту")
+            return False
+    
+    def _cleanup_expired_orders(self) -> None:
+        """Очищает истекшие ордера из отслеживания"""
+        try:
+            expired_orders = []
+            
+            with self.lock:
+                for order_id, order in list(self.watched_orders.items()):
+                    if order.is_expired() and order.status in [OrderStatus.PENDING, OrderStatus.SL_TP_ERROR]:
+                        expired_orders.append((order_id, order))
+            
+            # Обрабатываем истекшие ордера
+            for order_id, order in expired_orders:
+                logger.info(f"🕐 Очистка истекшего ордера: {order.symbol} #{order_id}")
+                self._handle_expired_order(order)
+                
+        except Exception as e:
+            logger.error(f"❌ Ошибка очистки истекших ордеров: {e}")
+    
+    def _handle_expired_order(self, order: WatchedOrder) -> None:
+        """Обрабатывает истекший ордер"""
+        try:
+            if order.status == OrderStatus.PENDING:
+                # Отменяем ордер на бирже если он еще активен
+                try:
+                    if self.client:
+                        self.client.futures_cancel_order(
+                            symbol=order.symbol,
+                            orderId=order.order_id
+                        )
+                        logger.info(f"🚫 Отменен истекший ордер {order.symbol} #{order.order_id}")
+                except Exception as e:
+                    logger.warning(f"⚠️ Не удалось отменить истекший ордер {order.order_id}: {e}")
+            
+            elif order.status == OrderStatus.SL_TP_PLACED:
+                # Отменяем связанные SL/TP ордера
+                self._cancel_external_sl_tp_orders(order)
+                logger.info(f"🚫 Отменены SL/TP для истекшей позиции {order.symbol}")
+            
+            # Удаляем из отслеживания
+            with self.lock:
+                if order.order_id in self.watched_orders:
+                    del self.watched_orders[order.order_id]
+                    self._save_persistent_state()
+            
+            # Отправляем уведомление
+            self._send_order_expired_notification(order)
+            
+        except Exception as e:
+            logger.error(f"❌ Ошибка обработки истекшего ордера {order.order_id}: {e}")
+    
+    def _send_order_expired_notification(self, order: WatchedOrder) -> None:
+        """Уведомление об истечении ордера"""
+        try:
+            status_text = {
+                OrderStatus.PENDING: "ЛИМИТНЫЙ ОРДЕР",
+                OrderStatus.SL_TP_PLACED: "ЗАЩИТНЫЕ ОРДЕРА",
+                OrderStatus.SL_TP_ERROR: "ПРОБЛЕМНЫЙ ОРДЕР"
+            }.get(order.status, "ОРДЕР")
+            
+            message = f"""
+⏰ <b>ИСТЕК {status_text}</b> ⏰
+
+📊 <b>Символ:</b> {order.symbol}
+🆔 <b>Ордер:</b> {order.order_id}
+📈 <b>Направление:</b> {order.signal_type}
+⏳ <b>Время жизни:</b> {(datetime.now() - order.created_at).total_seconds():.0f}s
+🕐 <b>Таймфрейм:</b> {order.source_timeframe}
+
+🗑️ <b>Автоматически удален из отслеживания</b>
+
+⏰ {datetime.now().strftime('%H:%M:%S')}
+"""
+            telegram_bot.send_message(message)
+            logger.info(f"📱 Уведомление об истечении ордера {order.symbol}")
+            
+        except Exception as e:
+            logger.error(f"❌ Ошибка отправки уведомления об истечении: {e}")
+
     def run(self) -> None:
         """Главный цикл мониторинга"""
         logger.info("🐕 Orders Watchdog запущен!")
@@ -1943,12 +2590,14 @@ class OrdersWatchdog:
         try:
             cycle_counter = 0  # Счетчик циклов для периодической проверки позиций
             sync_counter = 0   # Счетчик для проверки синхронизации (каждые 10 минут)
+            cleanup_counter = 0  # Счетчик для очистки истекших ордеров (каждые 30 секунд)
+            
             while not self.stop_event.is_set():
                 try:
                     # Проверяем входящие запросы
                     self._process_incoming_requests()
                     
-                    # Проверяем статус ордеров
+                    # Проверяем статус ордеров (включает автоматическую очистку истекших)
                     self.check_orders_status()
                     
                     # Проверяем позиции каждые 6 циклов (30 секунд)
@@ -1956,6 +2605,15 @@ class OrdersWatchdog:
                     if cycle_counter >= 6:
                         self.check_positions_status()
                         cycle_counter = 0
+                    
+                    # Дополнительная очистка истекших ордеров каждые 6 циклов
+                    cleanup_counter += 1
+                    if cleanup_counter >= 6:
+                        expired_count = len([o for o in self.watched_orders.values() if o.is_expired()])
+                        if expired_count > 0:
+                            logger.info(f"🧹 Дополнительная очистка: найдено {expired_count} истекших ордеров")
+                            self._cleanup_expired_orders()
+                        cleanup_counter = 0
                     
                     # Проверяем синхронизацию каждые 120 циклов (10 минут)
                     sync_counter += 1
@@ -1986,21 +2644,123 @@ class OrdersWatchdog:
             self.shutdown()
     
     def shutdown(self) -> None:
-        """Корректное завершение работы"""
-        logger.info("🛑 Завершение работы Orders Watchdog...")
+        """Корректное завершение работы с интерактивным управлением ордерами"""
+        logger.info("🛑 Начинается корректное завершение Orders Watchdog...")
         self.stop_event.set()
+        
+        # Проверяем активные лимитные ордера
+        active_limit_orders = []
+        sl_tp_orders = []
+        
+        with self.lock:
+            for order in self.watched_orders.values():
+                if order.status == OrderStatus.PENDING:
+                    active_limit_orders.append(order)
+                elif order.status == OrderStatus.SL_TP_PLACED:
+                    sl_tp_orders.append(order)
+        
+        logger.info(f"📊 Найдено активных ордеров: {len(active_limit_orders)} лимитных, {len(sl_tp_orders)} позиций с SL/TP")
+        
+        # Интерактивный вопрос о лимитных ордерах
+        if active_limit_orders:
+            try:
+                print("\n" + "="*60)
+                print("🚨 ВНИМАНИЕ: Обнаружены активные лимитные ордера!")
+                print("="*60)
+                for order in active_limit_orders:
+                    print(f"• {order.symbol}: {order.signal_type} {order.quantity} @ {order.price}")
+                    print(f"  Создан: {order.created_at.strftime('%H:%M:%S')}")
+                    if order.expires_at:
+                        print(f"  Истекает: {order.expires_at.strftime('%H:%M:%S')}")
+                
+                print("\nЧто делать с лимитными ордерами?")
+                print("1. [K] Оставить к исполнению (Keep)")
+                print("2. [C] Отменить все (Cancel)")
+                print("3. [A] Спросить для каждого (Ask)")
+                
+                while True:
+                    choice = input("\nВыберите действие [K/C/A]: ").upper().strip()
+                    if choice in ['K', 'C', 'A']:
+                        break
+                    print("❌ Неверный выбор! Используйте K, C или A")
+                
+                if choice == 'C':
+                    # Отменяем все лимитные ордера
+                    self._cancel_all_limit_orders(active_limit_orders)
+                elif choice == 'A':
+                    # Спрашиваем для каждого ордера
+                    self._interactive_order_management(active_limit_orders)
+                # Если K - оставляем как есть
+                
+            except (KeyboardInterrupt, EOFError):
+                logger.warning("⚠️ Прерывание пользователя - сохраняем все ордера")
+        
+        # Уведомляем об активных позициях
+        if sl_tp_orders:
+            logger.info(f"💼 Активные позиции с SL/TP будут продолжать мониториться при следующем запуске")
+            position_summary = "\n".join([f"• {order.symbol}: {order.signal_type}" for order in sl_tp_orders])
+            self._send_watchdog_notification(f"🛑 Watchdog остановлен\n\n📊 Активные позиции:\n{position_summary}")
         
         # Сохраняем состояние
         self._save_persistent_state()
         
-        # Отправляем уведомление о завершении
-        try:
-            self._send_watchdog_notification("🛑 Orders Watchdog остановлен")
-        except:
-            pass
-        
-        logger.info("✅ Orders Watchdog завершен")
+        logger.info("✅ Orders Watchdog корректно завершен")
         sys.exit(0)
+    
+    def _cancel_all_limit_orders(self, orders: List[WatchedOrder]) -> None:
+        """Отменяет все лимитные ордера"""
+        logger.info(f"🚫 Отменяем {len(orders)} лимитных ордеров...")
+        
+        for order in orders:
+            try:
+                if self.client:
+                    self.client.futures_cancel_order(
+                        symbol=order.symbol,
+                        orderId=order.order_id
+                    )
+                    logger.info(f"✅ Отменен: {order.symbol} #{order.order_id}")
+                
+                # Удаляем из отслеживания
+                with self.lock:
+                    if order.order_id in self.watched_orders:
+                        del self.watched_orders[order.order_id]
+                        
+            except Exception as e:
+                logger.error(f"❌ Ошибка отмены ордера {order.order_id}: {e}")
+    
+    def _interactive_order_management(self, orders: List[WatchedOrder]) -> None:
+        """Интерактивное управление каждым ордером"""
+        for i, order in enumerate(orders, 1):
+            print(f"\n--- Ордер {i}/{len(orders)} ---")
+            print(f"Символ: {order.symbol}")
+            print(f"Направление: {order.signal_type}")
+            print(f"Количество: {order.quantity}")
+            print(f"Цена: {order.price}")
+            print(f"Создан: {order.created_at.strftime('%H:%M:%S')}")
+            if order.expires_at:
+                print(f"Истекает: {order.expires_at.strftime('%H:%M:%S')}")
+            
+            while True:
+                choice = input("Оставить [K] или отменить [C]? ").upper().strip()
+                if choice in ['K', 'C']:
+                    break
+                print("❌ Используйте K или C")
+            
+            if choice == 'C':
+                try:
+                    if self.client:
+                        self.client.futures_cancel_order(
+                            symbol=order.symbol,
+                            orderId=order.order_id
+                        )
+                    
+                    with self.lock:
+                        if order.order_id in self.watched_orders:
+                            del self.watched_orders[order.order_id]
+                    
+                    print(f"✅ Ордер {order.symbol} отменен")
+                except Exception as e:
+                    print(f"❌ Ошибка отмены: {e}")
 
 
 # API для интеграции с order_executor
@@ -2048,20 +2808,101 @@ watchdog_api = WatchdogAPI()
 
 def main():
     """Точка входа в приложение"""
+    # --- OrderSyncService интеграция ---
+    try:
+        from order_sync_service import create_order_sync_service, OrderRepository
+        sync_service = create_order_sync_service()
+        logger.info("🔄 Синхронизация ордеров перед запуском OrdersWatchdog...")
+        sync_report = sync_service.sync_orders()
+        if sync_report.error_count > 0:
+            logger.warning(f"⚠️ Синхронизация с ошибками: {sync_report.error_count}")
+        else:
+            logger.info(f"✅ Синхронизация завершена: {sync_report.total_processed} обработано")
+        # --- Синхронизация JSON-файла с БД и уведомления ---
+        sync_json_with_db(sync_report)
+    except Exception as e:
+        logger.error(f"❌ Ошибка синхронизации ордеров: {e}")
+    # --- END OrderSyncService интеграция ---
     try:
         watchdog = OrdersWatchdog()
-        
         if not watchdog.client:
             logger.error("❌ Не удалось инициализировать Binance клиент")
             sys.exit(1)
-        
         watchdog.run()
-        
     except KeyboardInterrupt:
         logger.info("👋 Получен сигнал завершения от пользователя")
     except Exception as e:
         logger.error(f"💥 Критическая ошибка: {e}")
         sys.exit(1)
+
+
+# --- Новый метод для синхронизации JSON-файла с БД и уведомлений ---
+def sync_json_with_db(sync_report):
+    """
+    Синхронизирует orders_watchdog_state.json с актуальными ордерами из БД,
+    логирует и отправляет уведомления по удалённым ордерам.
+    """
+    try:
+        from order_sync_service import OrderRepository
+        from telegram_bot import telegram_bot
+        import json
+        from pathlib import Path
+        from datetime import datetime
+        
+        # Получаем актуальные ордера из БД
+        repo = OrderRepository()
+        db_orders = repo.get_all_orders()
+        # Преобразуем к формату JSON-файла
+        def order_to_json(order):
+            return {
+                "symbol": order.symbol,
+                "order_id": order.order_id,
+                "side": order.side,
+                "position_side": order.position_side,
+                "quantity": order.quantity,
+                "price": order.price,
+                "signal_type": order.signal_type,
+                "stop_loss": order.stop_loss,
+                "take_profit": order.take_profit,
+                "status": order.status,
+                "created_at": order.created_at,
+                "filled_at": order.filled_at,
+                "sl_order_id": order.sl_order_id,
+                "tp_order_id": order.tp_order_id,
+                "sl_tp_attempts": 0
+            }
+        json_orders = [order_to_json(o) for o in db_orders]
+        # Перезаписываем JSON-файл
+        state = {
+            "timestamp": datetime.now().isoformat(),
+            "watched_orders": json_orders
+        }
+        state_file = Path("orders_watchdog_state.json")
+        with open(state_file, "w", encoding="utf-8") as f:
+            json.dump(state, f, indent=2, ensure_ascii=False)
+        logger.info(f"💾 orders_watchdog_state.json синхронизирован с БД: {len(json_orders)} ордеров")
+        # Обработка удалённых ордеров
+        deleted_records = []
+        if hasattr(sync_report, 'records') and sync_report.records:
+            for record in sync_report.records:
+                if hasattr(record, 'action') and record.action == 'DELETED':
+                    deleted_records.append(record)
+        
+        if deleted_records:
+            for rec in deleted_records:
+                symbol = getattr(rec, 'symbol', '?')
+                order_id = getattr(rec, 'order_id', '?')
+                reason = getattr(rec, 'reason', '')
+                msg = f"🗑️ Удалён сиротский ордер: {symbol} #{order_id}\nПричина: {reason}"
+                logger.info(msg)
+                try:
+                    telegram_bot.send_message(msg)
+                except Exception as e:
+                    logger.warning(f"⚠️ Не удалось отправить уведомление в Telegram: {e}")
+        else:
+            logger.info("✅ Сиротских ордеров для удаления не найдено")
+    except Exception as e:
+        logger.error(f"❌ Ошибка sync_json_with_db: {e}")
 
 
 if __name__ == "__main__":

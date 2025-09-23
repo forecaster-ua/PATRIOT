@@ -18,7 +18,7 @@ import signal
 import sys
 import threading
 import traceback
-from datetime import datetime
+from datetime import datetime, timedelta
 from queue import Queue, Empty
 from pathlib import Path
 from typing import List, Optional, Dict, Any, Set
@@ -26,8 +26,9 @@ import gc
 from config import (
     TIMEFRAMES, TICKER_DELAY, MAX_WORKERS, PROCESSING_TIMEOUT,
     SCHEDULE_INTERVAL_MINUTES, SCHEDULE_AT_SECOND, 
-    DEFAULT_TICKERS_FILE, BATCH_LOG_FREQUENCY
+    DEFAULT_TICKERS_FILE, BATCH_LOG_FREQUENCY, reload_trading_config
 )
+from env_loader import reload_env_config
 
 # Импорты существующих модулей проекта
 import logging
@@ -38,8 +39,8 @@ try:
     from order_executor import execute_trading_signal
     from utils import logger
     from config import TIMEFRAMES
-    from orders_synchronizer import orders_sync, validate_signal_before_execution
-    from state_recovery import state_recovery, recover_system_state, is_symbol_available_for_trading
+    from unified_sync import orders_sync, validate_signal_before_execution
+    from unified_sync import state_recovery, recover_system_state, is_symbol_available_for_trading
     logger.info("✅ Successfully imported project modules")
 except ImportError as e:
     # Если импорт не удался, создаем базовый logger
@@ -307,7 +308,7 @@ class TickerMonitor:
         try:
             logger.info("🔄 Проверка синхронизации с Orders Watchdog...")
             
-            # Получаем отчет синхронизации
+            # Получаем отчет синхронизации через интерфейс совместимости
             sync_report = orders_sync.get_synchronization_report()
             
             if sync_report.get('watchdog_running', False):
@@ -399,8 +400,8 @@ class TickerMonitor:
         
         while not self.stop_event.is_set():
             try:
-                # Получаем тикер из очереди
-                ticker = self.ticker_queue.get(timeout=1)
+                # Получаем тикер из очереди с более коротким таймаутом
+                ticker = self.ticker_queue.get(timeout=0.5)
                 
                 if ticker is None or self.stop_event.is_set():
                     break
@@ -413,6 +414,11 @@ class TickerMonitor:
                     logger.info(f"🔍 [{worker_id}] Progress: {processed_count} processed, {remaining} remaining")
                 
                 try:
+                    # Проверяем stop_event перед началом обработки
+                    if self.stop_event.is_set():
+                        self.ticker_queue.task_done()
+                        break
+                    
                     # 🔒 ПРОВЕРКА ДОСТУПНОСТИ СИМВОЛА
                     is_available, availability_reason = is_symbol_available_for_trading(ticker)
                     if not is_available:
@@ -420,11 +426,21 @@ class TickerMonitor:
                         self.stats.update(processed=1)
                         continue
                     
+                    # Проверяем stop_event перед длительной операцией
+                    if self.stop_event.is_set():
+                        self.ticker_queue.task_done()
+                        break
+                    
                     # 1. Анализируем сигналы через SignalAnalyzer
                     analyzer = SignalAnalyzer(ticker)
                     signal_data = analyzer.analyze_ticker(self.stop_event)
                     
                     self.stats.update(processed=1)
+                    
+                    # Проверяем stop_event после анализа
+                    if self.stop_event.is_set():
+                        self.ticker_queue.task_done()
+                        break
                     
                     # 2. Если найдено схождение - передаем в OrderGenerator
                     if signal_data:
@@ -446,25 +462,59 @@ class TickerMonitor:
                 finally:
                     self.ticker_queue.task_done()
                     
-                    # Контролируемая пауза между обработкой тикеров
+                    # Контролируемая пауза между обработкой тикеров с проверкой stop_event
                     if not self.stop_event.is_set():
-                        time.sleep(self.ticker_delay)
+                        # Разбиваем длинную паузу на короткие интервалы для отзывчивости
+                        sleep_time = self.ticker_delay
+                        while sleep_time > 0 and not self.stop_event.is_set():
+                            chunk = min(sleep_time, 0.1)  # Проверяем каждые 100мс
+                            time.sleep(chunk)
+                            sleep_time -= chunk
             
             except Empty:
-                # Таймаут очереди - нормальная ситуация
+                # Таймаут очереди - проверяем stop_event и продолжаем
+                if self.stop_event.is_set():
+                    break
                 continue
             except Exception as e:
                 logger.error(f"❌ Worker {worker_id} critical error: {e}")
                 self.stats.update(errors=1)
-                continue
+                # Короткая пауза перед продолжением для избежания спама ошибок
+                if not self.stop_event.wait(1.0):  # wait возвращает True если event установлен
+                    continue
+                else:
+                    break
         
         logger.info(f"🏁 Worker {worker_id} completed: {processed_count} tickers processed")
     
     def _start_workers(self, num_workers: int = 1) -> None:
-        """Запускает рабочие потоки"""
-        self.worker_threads = []
-        actual_workers = min(num_workers, self.max_workers, len(self.tickers))
+        """Запускает рабочие потоки, предварительно завершая старые"""
+        # Сначала устанавливаем stop_event для корректной остановки
+        self.stop_event.set()
+        time.sleep(0.5)  # Даем время воркерам увидеть stop_event
         
+        # Останавливаем старые потоки, если они еще работают
+        stuck_threads = []
+        for thread in self.worker_threads:
+            if thread.is_alive():
+                logger.info(f"🔄 Останавливаем старый worker {thread.name}...")
+                thread.join(timeout=10)
+                if thread.is_alive():
+                    logger.warning(f"⚠️ Thread {thread.name} не завершился корректно - помечаем как stuck")
+                    stuck_threads.append(thread.name)
+
+        # Очищаем список потоков (даже если некоторые stuck)
+        self.worker_threads = []
+        
+        # Предупреждаем о stuck threads но продолжаем работу
+        if stuck_threads:
+            logger.warning(f"⚠️ Обнаружено {len(stuck_threads)} зависших потоков: {', '.join(stuck_threads)}")
+            logger.warning("⚠️ Продолжаем с новыми воркерами, старые будут завершены принудительно")
+        
+        # Сбрасываем stop_event для новых воркеров
+        self.stop_event.clear()
+
+        actual_workers = min(num_workers, self.max_workers, len(self.tickers))
         for i in range(actual_workers):
             worker = threading.Thread(
                 target=self._worker,
@@ -473,7 +523,7 @@ class TickerMonitor:
             )
             worker.start()
             self.worker_threads.append(worker)
-        
+
         logger.info(f"🚀 Started {actual_workers} worker thread(s)")
     
     def _wait_for_completion(self) -> None:
@@ -489,8 +539,8 @@ class TickerMonitor:
             remaining = self.ticker_queue.qsize()
             elapsed = time.time() - start_wait
             
-            # Логируем только каждые 30 секунд или при малом количестве тикеров
-            if elapsed - last_log_time > 30 or remaining <= 5:
+            # Логируем только каждые 60 секунд или при малом количестве тикеров (уменьшено spam)
+            if elapsed - last_log_time > 60 or remaining <= 3:
                 logger.info(f"📊 Progress: {remaining} tickers remaining (elapsed: {elapsed:.1f}s)")
                 last_log_time = elapsed
             
@@ -510,6 +560,13 @@ class TickerMonitor:
                 worker.join(timeout=15)
                 if worker.is_alive():
                     logger.warning(f"⚠️ Thread {worker.name} still alive after timeout")
+                    # Не создаем новые воркеры пока старые не завершились
+        
+        # Проверяем финальное состояние потоков
+        final_alive_threads = [t for t in self.worker_threads if t.is_alive()]
+        if final_alive_threads:
+            logger.error(f"❌ {len(final_alive_threads)} threads остались зависшими: {[t.name for t in final_alive_threads]}")
+            logger.error("❌ Система может работать нестабильно до полной перезагрузки")
         
         # Очищаем оставшиеся элементы в очереди
         cleared_count = 0
@@ -569,6 +626,19 @@ class TickerMonitor:
         self.stats.reset()
         self.stats.start_time = self.current_batch_start
         
+        # 🔄 Динамическая перезагрузка конфигурации перед каждым batch'ом
+        try:
+            # 1. Перезагружаем .env файл
+            reload_env_config()
+            
+            # 2. Обновляем торговые параметры из новых переменных окружения
+            config_changed = reload_trading_config()
+            
+            if config_changed:
+                logger.info("🔄 Configuration updated before batch processing")
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to reload configuration: {e}")
+        
         logger.info("🚀 STARTING TICKER PROCESSING BATCH")
         logger.info(f"📅 {self.current_batch_start.strftime('%H:%M:%S')} | {len(self.tickers)} tickers | {', '.join(TIMEFRAMES)} timeframes")
         
@@ -588,10 +658,13 @@ class TickerMonitor:
             # 4. Выводим итоговую статистику
             self._log_batch_summary()
     
-    def run(self) -> None:
+    def run(self, run_initial_batch: bool = True) -> None:
         """
         Главный цикл работы оркестратора
         Включает планировщик и обработку команд
+        
+        Args:
+            run_initial_batch: Запустить ли первичную обработку сразу
         """
         logger.info("🎼 Ticker Monitor Orchestra started!")
         
@@ -624,17 +697,20 @@ class TickerMonitor:
                 logger.error(f"❌ State recovery failed: {e}")
                 logger.warning("⚠️ Continuing with limited functionality...")
             
-            # Запускаем первичную обработку для проверки системы
-            logger.info("🎬 Running initial processing...")
-            self.process_tickers()
+            # Запускаем первичную обработку только если указано
+            if run_initial_batch:
+                logger.info("🎬 Running initial processing...")
+                self.process_tickers()
+            else:
+                logger.info("⏳ Skipping initial batch, waiting for scheduled time...")
             
             # Настраиваем расписание - каждые 15 минут
             schedule.every().hour.at("00:00").do(self.process_tickers)
-            schedule.every().hour.at("15:00").do(self.process_tickers) 
-            schedule.every().hour.at("30:00").do(self.process_tickers)
-            schedule.every().hour.at("45:00").do(self.process_tickers)
+            #schedule.every().hour.at("15:00").do(self.process_tickers) 
+            #schedule.every().hour.at("30:00").do(self.process_tickers)
+            #schedule.every().hour.at("45:00").do(self.process_tickers)
 
-            logger.info("⏰ Scheduled processing at 00, 15, 30, 45 minutes of each hour")
+            logger.info("⏰ Scheduled processing at 00, OFF are: 15, 30, 45 minutes of each hour")
             logger.info("🎵 Waiting for next scheduled processing... Press Ctrl+C to stop")
             
             # Главный цикл планировщика
@@ -667,6 +743,42 @@ class TickerMonitor:
         }
 
 
+def calculate_time_to_next_hour() -> int:
+    """Рассчитывает время до начала следующего часа в секундах"""
+    now = datetime.now()
+    next_hour = now.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
+    return int((next_hour - now).total_seconds())
+
+
+def wait_for_next_hour():
+    """Ожидает начала следующего часа с отображением обратного отсчета"""
+    seconds_to_wait = calculate_time_to_next_hour()
+    next_start_time = datetime.now() + timedelta(seconds=seconds_to_wait)
+    
+    logger.info(f"⏰ Waiting for next hour scheduling at: {next_start_time.strftime('%H:%M:%S')}")
+    logger.info(f"⌛ Time to wait: {seconds_to_wait // 60} minutes {seconds_to_wait % 60} seconds")
+    
+    try:
+        # Показываем обратный отсчет каждые 60 секунд
+        while seconds_to_wait > 0:
+            if seconds_to_wait % 60 == 0 or seconds_to_wait <= 10:
+                minutes = seconds_to_wait // 60
+                seconds = seconds_to_wait % 60
+                if minutes > 0:
+                    logger.info(f"⏳ {minutes}m {seconds}s remaining until next batch...")
+                else:
+                    logger.info(f"⏳ {seconds}s remaining until next batch...")
+            
+            time.sleep(1)
+            seconds_to_wait -= 1
+            
+        logger.info("🎬 Starting batch at scheduled time!")
+        
+    except KeyboardInterrupt:
+        logger.info("⌨️ Wait interrupted by user")
+        raise
+
+
 def main():
     """
     Точка входа в приложение
@@ -675,12 +787,37 @@ def main():
     try:
         logger.info("🚀 Starting PATRIOT Ticker Monitor...")
         
-        # Создаем и запускаем оркестратор
+        # Предлагаем пользователю выбор запуска
+        current_time = datetime.now().strftime('%H:%M:%S')
+        next_hour_time = (datetime.now().replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)).strftime('%H:%M:%S')
+        
+        print(f"\n⏰ Current time: {current_time}")
+        print(f"📅 Next scheduled batch: {next_hour_time}")
+        print()
+        
+        try:
+            response = input("🚀 Start batch now? (Y/n): ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            print("\n👋 Goodbye!")
+            return
+        
+        start_immediately = response in ['', 'y', 'yes']
+        
+        # Создаем оркестратор
         monitor = TickerMonitor(
             max_workers=MAX_WORKERS,
             ticker_delay=TICKER_DELAY
         )
-        monitor.run()
+        
+        if start_immediately:
+            logger.info("▶️ Starting first batch immediately...")
+            monitor.run(run_initial_batch=True)
+        else:
+            logger.info("⏳ Waiting for next scheduled time...")
+            wait_for_next_hour()
+            logger.info("🎬 Running first scheduled batch...")
+            monitor.process_tickers()  # Запускаем первый батч по расписанию
+            monitor.run(run_initial_batch=False)  # Продолжаем по расписанию
         
     except KeyboardInterrupt:
         logger.info("👋 Graceful shutdown requested by user")

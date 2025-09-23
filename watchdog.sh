@@ -36,6 +36,48 @@ stop_watchdog() {
     fi
 }
 
+# Функция интерактивной остановки
+istop_watchdog() {
+    if [ -f "$PID_FILE" ]; then
+        PID=$(cat "$PID_FILE")
+        if kill -0 "$PID" 2>/dev/null; then
+            echo "🛑 Интерактивная остановка Orders Watchdog (PID: $PID)..."
+            echo "📋 Запускаем скрипт с подключенным терминалом для обработки активных ордеров..."
+            
+            # Останавливаем фоновый процесс
+            kill -TERM "$PID"
+            sleep 2
+            
+            # Запускаем интерактивную версию для обработки shutdown
+            cd "$SCRIPT_DIR"
+            /home/alexross/patriot/venv/bin/python -c "
+import sys
+sys.path.append('$SCRIPT_DIR')
+from orders_watchdog import OrdersWatchdog
+
+# Создаем экземпляр - автоматически загрузит состояние и подключится
+print('🔄 Проверяем активные ордера и запускаем интерактивное управление...')
+watchdog = OrdersWatchdog()
+
+# Сразу вызываем shutdown для интерактивной обработки
+watchdog.shutdown()
+"
+            
+            # Убеждаемся что процесс остановлен
+            if kill -0 "$PID" 2>/dev/null; then
+                echo "Принудительная остановка фонового процесса..."
+                kill -KILL "$PID"
+            fi
+        else
+            echo "❌ Процесс не найден или уже остановлен"
+        fi
+        rm -f "$PID_FILE"
+        echo "✅ Orders Watchdog остановлен"
+    else
+        echo "PID файл не найден, возможно процесс уже остановлен"
+    fi
+}
+
 # Функция запуска
 start_watchdog() {
     if [ -f "$PID_FILE" ]; then
@@ -53,7 +95,7 @@ start_watchdog() {
     echo "Логи: $LOG_FILE"
     
     # Запускаем в фоне и записываем PID
-    nohup python3 "$PYTHON_SCRIPT" >> "$LOG_FILE" 2>&1 &
+    nohup /home/alexross/patriot/venv/bin/python "$PYTHON_SCRIPT" >> "$LOG_FILE" 2>&1 &
     PID=$!
     echo $PID > "$PID_FILE"
     
@@ -123,6 +165,9 @@ case "${1:-}" in
     stop)
         stop_watchdog
         ;;
+    istop)
+        istop_watchdog
+        ;;
     restart)
         restart_watchdog
         ;;
@@ -136,11 +181,12 @@ case "${1:-}" in
         check_sync
         ;;
     *)
-        echo "Использование: $0 {start|stop|restart|status|logs|check}"
+        echo "Использование: $0 {start|stop|istop|restart|status|logs|check}"
         echo ""
         echo "Команды:"
         echo "  start   - Запустить Orders Watchdog в фоне"
-        echo "  stop    - Остановить Orders Watchdog"
+        echo "  stop    - Остановить Orders Watchdog (без интерактивного управления ордерами)"
+        echo "  istop   - Интерактивная остановка с управлением активными ордерами"
         echo "  restart - Перезапустить Orders Watchdog"
         echo "  status  - Проверить статус Orders Watchdog"
         echo "  logs    - Показать логи в реальном времени"

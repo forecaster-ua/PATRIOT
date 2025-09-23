@@ -33,7 +33,8 @@ class TelegramBot:
             "chat_id": TELEGRAM_CHAT_ID,
             "text": message,
             "parse_mode": "Markdown",
-            "disable_notification": False
+            "disable_notification": True,
+            "protect_content": False  # ✅ ДОБАВЛЕНО: Защита от пересылки
         }
         
         # Attempt to send the message and log the result
@@ -58,7 +59,8 @@ class TelegramBot:
             "chat_id": TELEGRAM_CHAT_ID,
             "text": message,
             "parse_mode": "Markdown",
-            "disable_notification": False
+            "disable_notification": False,
+            "protect_content": True  # ✅ ДОБАВЛЕНО: Защита от пересылки
         }
         
         if self._send_request(payload):
@@ -72,7 +74,8 @@ class TelegramBot:
             "chat_id": TELEGRAM_CHAT_ID,
             "text": message,
             "parse_mode": parse_mode,
-            "disable_notification": False
+            "disable_notification": False,
+            "protect_content": True  # ✅ ДОБАВЛЕНО: Защита от пересылки
         }
         
         if self._send_request(payload):
@@ -119,6 +122,10 @@ class TelegramBot:
             message += f"🛑 Stop: `{signal['stop_loss']}`\n"
         if signal.get('take_profit', 0) > 0:
             message += f"🎯 Target: `{signal['take_profit']}`\n"
+
+        # Добавляем Risk/Reward Ratio
+        if 'risk_reward' in signal:
+            message += f"⚖️ Risk/Reward: `{signal['risk_reward']}`\n"
         
         # Временная метка
         if 'timestamp' in signal:

@@ -1,0 +1,39 @@
+Detailed Bugfix Roadmap
+======================
+
+1. Analyze Order Execution Handler
+   - Locate the code responsible for handling limit order executions.
+   - Check if there is a callback/event for successful execution.
+   - Ensure Telegram notification is sent when a limit order is executed.
+
+2. Implement Stop Loss & Take Profit After Limit Execution
+   - Verify if stop loss and take profit orders are created after limit order execution.
+   - If missing, add logic to create these orders immediately after execution.
+   - Ensure OCO (One Cancels Other) logic is applied for these orders.
+
+3. Audit OCO Logic
+   - Review OCO implementation for stop/take orders.
+   - Confirm OCO is triggered only after limit order execution, not before.
+   - Add logging and Telegram reporting for OCO events (triggered/canceled).
+
+4. Improve Telegram Reporting
+   - Ensure all order events (execution, stop/take, cancellation, OCO triggers) are reported to Telegram.
+   - Standardize message formats for clarity.
+   - Add error handling and fallback notifications for failed order actions.
+
+5. Test and Monitor
+   - Write unit/integration tests for the full workflow.
+   - Simulate various scenarios (limit execution, OCO triggers, cancellations).
+   - Monitor logs and Telegram for correct event reporting.
+
+6. Documentation & Knowledge Sharing
+   - Update this file with findings, fixes, and workflow changes.
+   - Share results and best practices with the team.
+
+First Step to Execution
+=======================
+
+Start with Step 1: Analyze Order Execution Handler
+- Find the function/class/module that processes limit order executions.
+- Add debug logging to confirm when and how limit order executions are detected.
+- Document the current flow in this file before making changes.

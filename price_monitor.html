@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PATRIOT Price Monitor</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            color: #fff;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            font-size: 16px;
+            font-weight: bold;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            min-width: 120px;
+        }
+
+        .btn-start {
+            background: linear-gradient(45deg, #4CAF50, #45a049);
+            color: white;
+        }
+
+        .btn-start:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(76, 175, 80, 0.3);
+        }
+
+        .btn-start:disabled {
+            background: #666;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-stop {
+            background: linear-gradient(45deg, #f44336, #da190b);
+            color: white;
+        }
+
+        .btn-stop:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(244, 67, 54, 0.3);
+        }
+
+        .btn-stop:disabled {
+            background: #666;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .status {
+            text-align: center;
+            margin-bottom: 20px;
+            padding: 10px;
+            border-radius: 8px;
+            font-weight: bold;
+        }
+
+        .status.connected {
+            background: rgba(76, 175, 80, 0.2);
+            border: 1px solid #4CAF50;
+        }
+
+        .status.disconnected {
+            background: rgba(244, 67, 54, 0.2);
+            border: 1px solid #f44336;
+        }
+
+        .status.connecting {
+            background: rgba(255, 193, 7, 0.2);
+            border: 1px solid #ffc107;
+        }
+
+        .table-container {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 20px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        th, td {
+            padding: 12px 16px;
+            text-align: left;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        th {
+            background: rgba(0, 0, 0, 0.2);
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        tr:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .symbol {
+            font-weight: bold;
+            font-size: 1.1rem;
+        }
+
+        .price {
+            font-weight: bold;
+            font-size: 1.1rem;
+            transition: all 0.3s ease;
+        }
+
+        .price.up {
+            color: #4CAF50;
+            text-shadow: 0 0 5px rgba(76, 175, 80, 0.5);
+        }
+
+        .price.down {
+            color: #f44336;
+            text-shadow: 0 0 5px rgba(244, 67, 54, 0.5);
+        }
+
+        .price.neutral {
+            color: #999;
+        }
+
+        .change {
+            font-weight: bold;
+        }
+
+        .change.positive {
+            color: #4CAF50;
+        }
+
+        .change.negative {
+            color: #f44336;
+        }
+
+        .last-update {
+            text-align: center;
+            margin-top: 20px;
+            color: #ccc;
+            font-size: 0.9rem;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            font-size: 1.2rem;
+            color: #ccc;
+        }
+
+        .error {
+            background: rgba(244, 67, 54, 0.2);
+            border: 1px solid #f44336;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+            text-align: center;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.7; }
+            100% { opacity: 1; }
+        }
+
+        .connecting .status {
+            animation: pulse 1.5s infinite;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚀 PATRIOT Price Monitor</h1>
+            <p>Real-time cryptocurrency price tracking via PATRIOT WebSocket Server</p>
+        </div>
+
+        <div class="controls">
+            <button id="startBtn" class="btn btn-start">Start</button>
+            <button id="stopBtn" class="btn btn-stop" disabled>Stop</button>
+        </div>
+
+        <div id="status" class="status disconnected">
+            🔴 Disconnected from PATRIOT Server
+        </div>
+
+        <div class="table-container">
+            <table id="priceTable">
+                <thead>
+                    <tr>
+                        <th>Symbol</th>
+                        <th>Current Price</th>
+                        <th>24h Change</th>
+                        <th>Last Update</th>
+                    </tr>
+                </thead>
+                <tbody id="tableBody">
+                    <tr>
+                        <td colspan="4" class="loading">Click START to connect to PATRIOT Server...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div id="lastUpdate" class="last-update">
+            Ready to connect to PATRIOT Server
+        </div>
+    </div>
+
+    <script>
+        class PriceMonitor {
+            constructor() {
+                this.ws = null;
+                this.isConnected = false;
+                this.priceData = new Map();
+                this.previousPrices = new Map();
+                
+                // Список тикеров из файла tickers.txt
+                this.tickers = [
+                    'BTCUSDT', 'ETHUSDT', 'BNBUSDT', 
+                    'ADAUSDT', 'ALGOUSDT', 'APTUSDT', 'AVAXUSDT',
+                    'SOLUSDT', 'CRVUSDT', 'BCHUSDT',
+                    'WIFUSDT', 'XLMUSDT', 'XRPUSDT', 'XTZUSDT'
+                ];
+
+                this.initializeElements();
+                this.setupEventListeners();
+                this.initializeTable();
+            }
+
+            initializeElements() {
+                this.startBtn = document.getElementById('startBtn');
+                this.stopBtn = document.getElementById('stopBtn');
+                this.status = document.getElementById('status');
+                this.tableBody = document.getElementById('tableBody');
+                this.lastUpdate = document.getElementById('lastUpdate');
+            }
+
+            setupEventListeners() {
+                this.startBtn.addEventListener('click', () => this.start());
+                this.stopBtn.addEventListener('click', () => this.stop());
+            }
+
+            initializeTable() {
+                this.tableBody.innerHTML = '';
+                this.tickers.forEach(ticker => {
+                    const row = document.createElement('tr');
+                    row.id = `row-${ticker}`;
+                    row.innerHTML = `
+                        <td class="symbol">${ticker}</td>
+                        <td class="price neutral" id="price-${ticker}">--</td>
+                        <td class="change" id="change-${ticker}">--</td>
+                        <td id="time-${ticker}">--</td>
+                    `;
+                    this.tableBody.appendChild(row);
+                });
+            }
+
+            start() {
+                this.updateStatus('connecting', '🟡 Connecting to PATRIOT Server...');
+                this.startBtn.disabled = true;
+                
+                try {
+                    // Подключаемся к нашему Python WebSocket серверу
+                    this.ws = new WebSocket('ws://localhost:8765');
+                    
+                    this.ws.onopen = () => {
+                        this.isConnected = true;
+                        this.updateStatus('connected', '🟢 Connected to PATRIOT Server');
+                        this.stopBtn.disabled = false;
+                        console.log('Connected to PATRIOT WebSocket server');
+                        
+                        // Отправляем команду START серверу
+                        this.ws.send(JSON.stringify({ type: 'start' }));
+                    };
+
+                    this.ws.onmessage = (event) => {
+                        try {
+                            const message = JSON.parse(event.data);
+                            this.handleServerMessage(message);
+                        } catch (error) {
+                            console.error('Error parsing message:', error);
+                        }
+                    };
+
+                    this.ws.onerror = (error) => {
+                        console.error('WebSocket error:', error);
+                        this.showError('Connection to PATRIOT server failed');
+                    };
+
+                    this.ws.onclose = () => {
+                        this.isConnected = false;
+                        this.updateStatus('disconnected', '🔴 Disconnected from PATRIOT Server');
+                        this.startBtn.disabled = false;
+                        this.stopBtn.disabled = true;
+                        console.log('Disconnected from PATRIOT WebSocket server');
+                    };
+
+                } catch (error) {
+                    console.error('Failed to start WebSocket:', error);
+                    this.showError('Failed to connect to PATRIOT server');
+                    this.startBtn.disabled = false;
+                }
+            }
+
+            stop() {
+                if (this.ws && this.isConnected) {
+                    // Отправляем команду STOP серверу
+                    this.ws.send(JSON.stringify({ type: 'stop' }));
+                }
+                
+                if (this.ws) {
+                    this.ws.close();
+                    this.ws = null;
+                }
+                this.isConnected = false;
+                this.updateStatus('disconnected', '🔴 Disconnected from PATRIOT Server');
+                this.startBtn.disabled = false;
+                this.stopBtn.disabled = true;
+            }
+
+            handleServerMessage(message) {
+                switch (message.type) {
+                    case 'tickers':
+                        console.log('Received tickers from server:', message.data);
+                        this.tickers = message.data;
+                        this.initializeTable();
+                        break;
+                        
+                    case 'price_update':
+                        this.updatePrice(message);
+                        break;
+                        
+                    case 'status':
+                        if (message.status === 'connected') {
+                            this.updateStatus('connected', '🟢 Monitoring Active');
+                        } else if (message.status === 'disconnected') {
+                            this.updateStatus('connected', '🟢 Connected (Monitoring Stopped)');
+                        }
+                        break;
+                        
+                    default:
+                        console.log('Unknown message type:', message.type);
+                }
+            }
+
+            updatePrice(data) {
+                // Адаптируем под формат нашего сервера
+                const symbol = data.symbol || data.s; 
+                const price = data.price || parseFloat(data.c || 0);
+                const change = data.change_24h || parseFloat(data.P || 0);
+                
+                if (!symbol || !this.tickers.includes(symbol)) return;
+
+                // Сохраняем предыдущую цену
+                const previousPrice = this.priceData.get(symbol);
+                this.priceData.set(symbol, price);
+
+                const priceElement = document.getElementById(`price-${symbol}`);
+                const changeElement = document.getElementById(`change-${symbol}`);
+                const timeElement = document.getElementById(`time-${symbol}`);
+
+                if (priceElement) {
+                    // Определяем направление изменения цены
+                    let priceClass = 'neutral';
+                    if (previousPrice !== undefined) {
+                        if (price > previousPrice) {
+                            priceClass = 'up';
+                        } else if (price < previousPrice) {
+                            priceClass = 'down';
+                        }
+                    }
+
+                    // Обновляем цену с анимацией
+                    priceElement.className = `price ${priceClass}`;
+                    priceElement.textContent = price.toFixed(8);
+
+                    // Обновляем изменение за 24ч
+                    if (changeElement) {
+                        const changeClass = change >= 0 ? 'positive' : 'negative';
+                        changeElement.className = `change ${changeClass}`;
+                        changeElement.textContent = `${change >= 0 ? '+' : ''}${change.toFixed(2)}%`;
+                    }
+
+                    // Обновляем время
+                    if (timeElement) {
+                        const now = new Date();
+                        timeElement.textContent = now.toLocaleTimeString();
+                    }
+                }
+
+                // Обновляем время последнего обновления
+                this.lastUpdate.textContent = `Last update: ${new Date().toLocaleTimeString()} (via PATRIOT Server)`;
+            }
+
+            updateStatus(type, message) {
+                this.status.className = `status ${type}`;
+                this.status.textContent = message;
+            }
+
+            showError(message) {
+                const errorDiv = document.createElement('div');
+                errorDiv.className = 'error';
+                errorDiv.textContent = `Error: ${message}`;
+                
+                // Вставляем перед таблицей
+                const container = document.querySelector('.table-container');
+                container.parentNode.insertBefore(errorDiv, container);
+                
+                // Удаляем через 5 секунд
+                setTimeout(() => {
+                    errorDiv.remove();
+                }, 5000);
+            }
+        }
+
+        // Инициализируем монитор при загрузке страницы
+        document.addEventListener('DOMContentLoaded', () => {
+            new PriceMonitor();
+        });
+    </script>
+</body>
+</html>
