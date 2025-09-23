@@ -1,3 +1,5 @@
+# This is a multi-user architecture for a trading bot system.
+
 ```mermaid
 erDiagram
     %% Пользователи и их роли (Admin, Manager, Trader)
