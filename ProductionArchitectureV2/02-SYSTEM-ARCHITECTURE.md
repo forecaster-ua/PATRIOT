@@ -51,6 +51,20 @@ Comprehensive security model with multiple protection layers:
 - **Data Encryption**: AES-256 for sensitive data and API credentials
 - **Access Control**: JWT-based authentication with RBAC
 
+#### 5. **Distributed Observability**
+Comprehensive logging, monitoring, and tracing across all system components:
+- **Structured Logging**: JSON-formatted logs with consistent metadata
+- **Distributed Tracing**: Request correlation across all microservices
+- **Real-time Metrics**: Application and business metrics collection
+- **Centralized Monitoring**: Unified dashboards and alerting system
+
+#### 6. **Request Correlation & Tracing**
+Every business operation tracked across the entire system:
+- **Correlation ID**: Unique identifier for each business transaction
+- **Trace Propagation**: Request IDs flow through all service calls
+- **Contextual Logging**: Every log entry includes request correlation data
+- **End-to-End Visibility**: Complete audit trail for debugging and compliance
+
 ---
 
 ## 🏗️ High-Level System Architecture
@@ -110,10 +124,18 @@ graph TB
         ES[Event Store<br/>Audit Trail]
     end
     
+    subgraph "Observability & Monitoring"
+        PROM[Prometheus<br/>Metrics Collection]
+        GRAF[Grafana<br/>Dashboards & Alerts]
+        JAEGER[Jaeger<br/>Distributed Tracing]
+        ELK[ELK Stack<br/>Centralized Logging]
+        ALERT[AlertManager<br/>Incident Response]
+    end
+    
     subgraph "Infrastructure"
-        PROM[Prometheus<br/>Metrics]
-        GRAF[Grafana<br/>Dashboards]
-        ELK[ELK Stack<br/>Logging]
+        LB[Load Balancer]
+        CONSUL[Consul<br/>Service Discovery]
+        VAULT[HashiCorp Vault<br/>Secrets Management]
     end
     
     %% External connections
@@ -166,6 +188,37 @@ graph TB
     OC --> PG
     SC --> PG
     KAFKA --> ES
+    
+    %% Observability connections
+    UC -.->|metrics| PROM
+    AC -.->|metrics| PROM
+    OC -.->|metrics| PROM
+    UQ -.->|metrics| PROM
+    PQ -.->|metrics| PROM
+    TE -.->|metrics| PROM
+    RE -.->|metrics| PROM
+    
+    UC -.->|logs| ELK
+    AC -.->|logs| ELK
+    OC -.->|logs| ELK
+    UQ -.->|logs| ELK
+    PQ -.->|logs| ELK
+    TE -.->|logs| ELK
+    RE -.->|logs| ELK
+    KONG -.->|logs| ELK
+    
+    UC -.->|traces| JAEGER
+    AC -.->|traces| JAEGER
+    OC -.->|traces| JAEGER
+    UQ -.->|traces| JAEGER
+    PQ -.->|traces| JAEGER
+    TE -.->|traces| JAEGER
+    RE -.->|traces| JAEGER
+    
+    PROM --> GRAF
+    PROM --> ALERT
+    ELK --> GRAF
+    JAEGER --> GRAF
     
     %% Monitoring
     UC -.-> PROM
@@ -853,6 +906,405 @@ class DatabaseConnectionPool:
             command_timeout=60  # Query timeout
         )
 ```
+
+---
+
+## 📊 Observability & Request Tracing Architecture
+
+### Distributed Observability Stack
+
+#### Core Components
+```mermaid
+graph TD
+    subgraph "Application Layer"
+        API[API Gateway]
+        SVC1[User Service]
+        SVC2[Order Service] 
+        SVC3[Portfolio Service]
+    end
+    
+    subgraph "Observability Pipeline"
+        LOG[Log Aggregator]
+        METRIC[Metrics Collector]
+        TRACE[Trace Collector]
+    end
+    
+    subgraph "Storage & Analysis"
+        ELK[Elasticsearch<br/>Log Storage]
+        PROM[Prometheus<br/>Metrics Storage]
+        JAEGER[Jaeger<br/>Trace Storage]
+    end
+    
+    subgraph "Visualization & Alerting"
+        GRAFANA[Grafana<br/>Dashboards]
+        ALERT[AlertManager<br/>Notifications]
+    end
+    
+    API -.->|logs| LOG
+    SVC1 -.->|logs| LOG
+    SVC2 -.->|logs| LOG
+    SVC3 -.->|logs| LOG
+    
+    API -.->|metrics| METRIC
+    SVC1 -.->|metrics| METRIC
+    SVC2 -.->|metrics| METRIC
+    SVC3 -.->|metrics| METRIC
+    
+    API -.->|traces| TRACE
+    SVC1 -.->|traces| TRACE
+    SVC2 -.->|traces| TRACE
+    SVC3 -.->|traces| TRACE
+    
+    LOG --> ELK
+    METRIC --> PROM
+    TRACE --> JAEGER
+    
+    ELK --> GRAFANA
+    PROM --> GRAFANA
+    JAEGER --> GRAFANA
+    PROM --> ALERT
+```
+
+### Request Correlation & Tracing
+
+#### Correlation ID Flow
+Every business operation receives a unique correlation ID that flows through all services:
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Gateway as API Gateway
+    participant UserSvc as User Service
+    participant OrderSvc as Order Service
+    participant Database
+    participant Kafka
+    
+    Note over Client,Kafka: Correlation ID: req_2025_12345
+    
+    Client->>Gateway: POST /orders (generates correlation-id)
+    Gateway->>Gateway: Add correlation-id header
+    Gateway->>UserSvc: Validate user (correlation-id: req_2025_12345)
+    UserSvc->>Database: Query user data (correlation-id: req_2025_12345)
+    Database-->>UserSvc: User data
+    UserSvc-->>Gateway: User validated (correlation-id: req_2025_12345)
+    
+    Gateway->>OrderSvc: Create order (correlation-id: req_2025_12345)
+    OrderSvc->>Database: Store order (correlation-id: req_2025_12345)
+    OrderSvc->>Kafka: Publish order.created (correlation-id: req_2025_12345)
+    OrderSvc-->>Gateway: Order created (correlation-id: req_2025_12345)
+    Gateway-->>Client: Response (correlation-id: req_2025_12345)
+```
+
+#### Implementation Patterns
+
+**1. Correlation ID Generation**
+```python
+import uuid
+from datetime import datetime
+
+class CorrelationIDManager:
+    @staticmethod
+    def generate_correlation_id() -> str:
+        """Generate unique correlation ID"""
+        timestamp = int(datetime.now().timestamp() * 1000)
+        unique_suffix = str(uuid.uuid4())[:8]
+        return f"req_{timestamp}_{unique_suffix}"
+    
+    @staticmethod
+    def extract_correlation_id(request) -> str:
+        """Extract or generate correlation ID from request"""
+        correlation_id = request.headers.get('X-Correlation-ID')
+        if not correlation_id:
+            correlation_id = CorrelationIDManager.generate_correlation_id()
+        return correlation_id
+```
+
+**2. Request Context Propagation**
+```python
+from contextvars import ContextVar
+
+# Context variable to store correlation ID
+correlation_id_var: ContextVar[str] = ContextVar('correlation_id')
+
+class RequestContext:
+    @staticmethod
+    def set_correlation_id(correlation_id: str):
+        """Set correlation ID in current context"""
+        correlation_id_var.set(correlation_id)
+    
+    @staticmethod
+    def get_correlation_id() -> str:
+        """Get correlation ID from current context"""
+        return correlation_id_var.get("")
+    
+    @staticmethod
+    def propagate_to_headers(headers: dict) -> dict:
+        """Add correlation ID to outgoing request headers"""
+        correlation_id = RequestContext.get_correlation_id()
+        if correlation_id:
+            headers['X-Correlation-ID'] = correlation_id
+            headers['X-Trace-ID'] = correlation_id
+        return headers
+```
+
+**3. Structured Logging with Context**
+```python
+import logging
+import json
+from datetime import datetime
+
+class ContextualLogger:
+    def __init__(self, service_name: str):
+        self.service_name = service_name
+        self.logger = logging.getLogger(service_name)
+        
+    def log(self, level: str, message: str, **kwargs):
+        """Log with full contextual information"""
+        correlation_id = RequestContext.get_correlation_id()
+        
+        log_entry = {
+            "timestamp": datetime.utcnow().isoformat(),
+            "level": level.upper(),
+            "service": self.service_name,
+            "correlation_id": correlation_id,
+            "message": message,
+            "context": kwargs
+        }
+        
+        self.logger.info(json.dumps(log_entry))
+    
+    def info(self, message: str, **kwargs):
+        self.log("info", message, **kwargs)
+    
+    def error(self, message: str, **kwargs):
+        self.log("error", message, **kwargs)
+
+# Usage example
+logger = ContextualLogger("user-command-service")
+logger.info("User order created", 
+           user_id="12345", 
+           order_id="ord_67890", 
+           symbol="BTCUSDT")
+```
+
+**4. Distributed Tracing Integration**
+```python
+from opentelemetry import trace
+from opentelemetry.exporter.jaeger.thrift import JaegerExporter
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+
+class DistributedTracing:
+    def __init__(self, service_name: str):
+        # Configure Jaeger exporter
+        jaeger_exporter = JaegerExporter(
+            agent_host_name="jaeger-agent",
+            agent_port=6831,
+        )
+        
+        # Set up tracer
+        trace.set_tracer_provider(TracerProvider())
+        tracer = trace.get_tracer_provider()
+        tracer.add_span_processor(
+            BatchSpanProcessor(jaeger_exporter)
+        )
+        
+        self.tracer = trace.get_tracer(service_name)
+    
+    def start_span(self, operation_name: str):
+        """Start a new span with correlation context"""
+        correlation_id = RequestContext.get_correlation_id()
+        
+        span = self.tracer.start_span(operation_name)
+        span.set_attribute("correlation_id", correlation_id)
+        span.set_attribute("service", self.service_name)
+        
+        return span
+```
+
+### Business Transaction Tracing
+
+#### Complete Order Lifecycle Tracing
+```mermaid
+graph TD
+    A[Client Request] --> B[API Gateway]
+    B --> C[Generate Correlation ID]
+    C --> D[User Service: Validate]
+    D --> E[Order Service: Create]
+    E --> F[Risk Service: Check]
+    F --> G[Trading Engine: Execute]
+    G --> H[Exchange API: Submit]
+    H --> I[Order Lifecycle: Track]
+    I --> J[Portfolio Service: Update]
+    J --> K[Notification Service: Alert]
+    K --> L[Response to Client]
+    
+    style A fill:#e1f5fe
+    style L fill:#e8f5e8
+    
+    A -.->|req_2025_12345| B
+    B -.->|req_2025_12345| C
+    C -.->|req_2025_12345| D
+    D -.->|req_2025_12345| E
+    E -.->|req_2025_12345| F
+    F -.->|req_2025_12345| G
+    G -.->|req_2025_12345| H
+    H -.->|req_2025_12345| I
+    I -.->|req_2025_12345| J
+    J -.->|req_2025_12345| K
+    K -.->|req_2025_12345| L
+```
+
+### Monitoring & Alerting Configuration
+
+#### Critical Business Metrics
+```yaml
+# Prometheus alerting rules for business operations
+groups:
+  - name: patriot.trading.alerts
+    rules:
+      - alert: OrderProcessingLatencyHigh
+        expr: histogram_quantile(0.95, rate(order_processing_duration_seconds_bucket[5m])) > 5
+        for: 2m
+        labels:
+          severity: warning
+          correlation_required: true
+        annotations:
+          summary: "High order processing latency detected"
+          description: "95th percentile order processing time is {{ $value }}s"
+          investigation: "Check correlation ID traces for bottlenecks"
+      
+      - alert: FailedOrdersHigh
+        expr: rate(orders_failed_total[5m]) > 0.1
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High order failure rate"
+          description: "Order failure rate: {{ $value }} failures/second"
+          
+      - alert: CorrelationIDMissing
+        expr: rate(http_requests_without_correlation_id_total[5m]) > 0
+        for: 30s
+        labels:
+          severity: warning
+        annotations:
+          summary: "Requests missing correlation ID"
+          description: "{{ $value }} requests/second without correlation ID"
+```
+
+#### Dashboard Configuration
+```json
+{
+  "dashboard": {
+    "title": "PATRIOT Trading - Request Tracing",
+    "panels": [
+      {
+        "title": "Request Volume by Correlation ID",
+        "type": "graph",
+        "query": "rate(http_requests_total[5m])",
+        "group_by": ["correlation_id", "service"]
+      },
+      {
+        "title": "End-to-End Latency Distribution", 
+        "type": "heatmap",
+        "query": "histogram_quantile(0.95, rate(request_duration_seconds_bucket[1m]))"
+      },
+      {
+        "title": "Error Rate by Service",
+        "type": "stat",
+        "query": "rate(http_requests_total{status=~'5..'}[5m]) / rate(http_requests_total[5m])"
+      },
+      {
+        "title": "Trace Completeness",
+        "type": "gauge",
+        "query": "traces_with_all_spans_total / traces_total * 100"
+      }
+    ]
+  }
+}
+```
+
+### Log Analysis Patterns
+
+#### Correlation-Based Log Queries
+```javascript
+// Elasticsearch queries for request tracing
+{
+  "query": {
+    "bool": {
+      "must": [
+        {"term": {"correlation_id": "req_2025_12345"}},
+        {"range": {"timestamp": {"gte": "now-1h"}}}
+      ]
+    }
+  },
+  "sort": [{"timestamp": "asc"}],
+  "size": 1000
+}
+
+// Get complete request flow with timing analysis
+{
+  "query": {
+    "term": {"correlation_id": "req_2025_12345"}
+  },
+  "aggs": {
+    "services": {
+      "terms": {"field": "service"},
+      "aggs": {
+        "duration": {"stats": {"field": "duration_ms"}},
+        "errors": {"filter": {"term": {"level": "error"}}},
+        "timeline": {
+          "date_histogram": {
+            "field": "timestamp",
+            "interval": "1s"
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+### Production Implementation Checklist
+
+#### Observability Requirements
+- [ ] **Correlation ID Generation**: Implemented at API Gateway level
+- [ ] **Context Propagation**: All service-to-service calls include correlation ID
+- [ ] **Structured Logging**: JSON format with consistent fields across all services
+- [ ] **Distributed Tracing**: Jaeger integration for complete request visibility
+- [ ] **Metrics Collection**: Prometheus metrics for business and technical KPIs
+- [ ] **Centralized Logging**: ELK stack for log aggregation and analysis
+- [ ] **Alerting Rules**: Critical alerts for business operations and system health
+- [ ] **Dashboards**: Real-time visibility into system performance and business metrics
+
+#### Business Transaction Requirements
+- [ ] **Order Lifecycle**: Complete tracing from placement to settlement
+- [ ] **Portfolio Updates**: Track all portfolio calculation triggers
+- [ ] **Risk Calculations**: Monitor risk engine decision making
+- [ ] **Exchange Interactions**: Full audit trail of exchange API calls
+- [ ] **User Actions**: Complete user journey tracking
+- [ ] **Strategy Execution**: Strategy decision and execution tracking
+
+---
+
+> **Critical Implementation Notes:**
+> 1. **Correlation ID is MANDATORY** for all production requests
+> 2. **Every log entry** must include correlation_id, service_name, and timestamp
+> 3. **Database operations** must be traced with correlation context
+> 4. **External API calls** must propagate correlation ID in headers
+> 5. **Error handling** must preserve correlation context for debugging
+> 6. **Performance impact** of tracing should be monitored and optimized
+
+> **Debugging Capabilities Added:**
+> - **End-to-end request tracing** across all microservices
+> - **Performance bottleneck identification** with detailed timing
+> - **Error correlation** across distributed components
+> - **Business transaction audit trails** for compliance
+> - **Real-time system health monitoring** with proactive alerts
+> - **Log correlation** for efficient troubleshooting
+
+
 
 ---
 

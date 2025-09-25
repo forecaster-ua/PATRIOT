@@ -35,24 +35,24 @@ This documentation follows a progressive disclosure approach, allowing readers t
 
 ### Core Architecture Documents
 
-| Document | Purpose | Target Audience |
-|----------|---------|-----------------|
-| **[01-SYSTEM-REQUIREMENTS](01-SYSTEM-REQUIREMENTS.md)** | Functional & non-functional requirements | All stakeholders |
-| **[02-SYSTEM-ARCHITECTURE](02-SYSTEM-ARCHITECTURE.md)** | High-level architecture & design decisions | Architects, Senior Developers |
-| **[03-COMPONENT-SPECIFICATIONS](03-COMPONENT-SPECIFICATIONS.md)** | Detailed service specifications | Development Team |
-| **[04-INFRASTRUCTURE](04-INFRASTRUCTURE.md)** | DevOps, deployment, monitoring | DevOps, System Administrators |
-| **[05-ARCHITECTURAL-DECISIONS](05-ARCHITECTURAL-DECISIONS.md)** | Decision records & rationale | Technical Leadership |
-| **[06-IMPLEMENTATION-ROADMAP](06-IMPLEMENTATION-ROADMAP.md)** | Migration plan & phases | Project Management, Development |
+| Document                                                         | Purpose | Target Audience | Version | Status | Lines |
+|------------------------------------------------------------------|---------|-----------------|---------|--------|-------|
+| **[01-SYSTEM-REQUIREMENTS](01-SYSTEM-REQUIREMENTS.md)**          | Functional & non-functional requirements | All stakeholders | 2.0 | DRAFT | 363   |
+| **[02-SYSTEM-ARCHITECTURE](02-SYSTEM-ARCHITECTURE.md)**          | High-level architecture & design decisions | Architects, Senior Developers | 2.0 | DRAFT | 1346  |
+| **[03-COMPONENT-SPECIFICATIONS](03-COMPONENT-SPECIFICATIONS.md)** | Detailed service specifications | Development Team | 2.0 | DRAFT | 2,366 |
+| **[04-INFRASTRUCTURE](04-INFRASTRUCTURE.md)**                    | DevOps, deployment, monitoring | DevOps, System Administrators | 2.0 | DRAFT | 1,643 |
+| **[05-ARCHITECTURAL-DECISIONS](05-ARCHITECTURAL-DECISIONS.md)**  | Decision records & rationale | Technical Leadership | 2.0 | DRAFT | 1,304 |
+| **[06-IMPLEMENTATION-ROADMAP](06-IMPLEMENTATION-ROADMAP.md)**    | Migration plan & phases | Project Management, Development | 2.0 | DRAFT | 1,814 |
 
 ### Supporting Documentation (Annexes)
 
-| Document | Content | Reference Level |
-|----------|---------|-----------------|
-| **[ANNEX-A-DATA-SCHEMAS](annexes/ANNEX-A-DATA-SCHEMAS.md)** | Kafka topics, API schemas, data contracts | Implementation |
-| **[ANNEX-B-DATABASE-DESIGN](annexes/ANNEX-B-DATABASE-DESIGN.md)** | ERD, table structures, relationships | Database Design |
-| **[ANNEX-C-DEPLOYMENT-EXAMPLES](annexes/ANNEX-C-DEPLOYMENT-EXAMPLES.md)** | Docker Compose, configuration examples | DevOps |
-| **[ANNEX-D-USE-CASES](annexes/ANNEX-D-USE-CASES.md)** | Use case diagrams, user scenarios | Business Analysis |
-| **[ANNEX-E-API-DOCUMENTATION](annexes/ANNEX-E-API-DOCUMENTATION.md)** | REST API specifications, WebSocket streams | API Integration |
+| Document | Content | Reference Level | Version | Status | Lines |
+|----------|---------|-----------------|---------|--------|-------|
+| **[ANNEX-A-DATA-SCHEMAS](annexes/ANNEX-A-DATA-SCHEMAS.md)** | Kafka topics, API schemas, data contracts | Implementation | 2.0 | DRAFT | 1,892 |
+| **[ANNEX-B-DATABASE-DESIGN](annexes/ANNEX-B-DATABASE-DESIGN.md)** | ERD, table structures, relationships | Database Design | 2.0 | DRAFT | 2,533 |
+| **[ANNEX-C-DEPLOYMENT-EXAMPLES](annexes/ANNEX-C-DEPLOYMENT-EXAMPLES.md)** | Docker Compose, configuration examples | DevOps | 2.0 | DRAFT | 2,872 |
+| **[ANNEX-D-USE-CASES](annexes/ANNEX-D-USE-CASES.md)** | Use case diagrams, user scenarios | Business Analysis | 2.0 | DRAFT | 681 |
+| **[ANNEX-E-API-DOCUMENTATION](annexes/ANNEX-E-API-DOCUMENTATION.md)** | REST API specifications, WebSocket streams | API Integration | 2.0 | DRAFT | 4,592 |
 
 ---
 

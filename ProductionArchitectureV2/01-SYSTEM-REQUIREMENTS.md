@@ -154,7 +154,8 @@ The PATRIOT trading system is designed as a **multi-user hedge fund platform** t
 
 #### FR-006.1: Cryptographic Security
 - System SHALL encrypt API keys using AES-256 encryption with secure key management
-- System SHALL implement secure data transmission using TLS 1.3
+- System SHALL implement secure data transmission using TLS 1.3 for all external traffic (client-to-system and inter-host communication). 
+- Internal container-to-container traffic within the same Docker network on a single host MAY use plain HTTP.
 - System SHALL support encrypted data storage for sensitive information
 - System SHALL maintain cryptographic key rotation policies
 
@@ -249,10 +250,11 @@ The PATRIOT trading system is designed as a **multi-user hedge fund platform** t
 **Category**: Security and Privacy
 
 #### NFR-003.1: Data Protection Requirements
-- System SHALL encrypt all data in transit and at rest
-- System SHALL implement secure key management with hardware security modules
+- System SHALL encrypt sensitive data in transit outside the host using TLS 1.3, and SHALL encrypt sensitive data at rest (e.g., sensitive tokens) using industry-standard algorithms such as AES-256. 
+- Non-sensitive logs and database entries are exempt from this requirement. 
+- Internal container-to-container traffic on the same host MAY use plain HTTP.
+- System SHALL implement secure key management for sensitive cryptographic keys, ensuring keys are securely generated, stored, rotated, and used. Keys MUST not be stored in plain text and MUST be protected against unauthorized access.
 - System SHALL support data anonymization for analytics purposes
-- System SHALL comply with GDPR and relevant financial regulations
 
 #### NFR-003.2: Access Control Requirements
 - System SHALL implement principle of least privilege access

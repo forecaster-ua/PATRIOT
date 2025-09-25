@@ -1866,6 +1866,488 @@ class EventStoreService:
                         occurred_at=row["occurred_at"]
                     )
 ```
+- **Custom Metrics**: Trading-specific metrics like P&L, position tracking
+
+#### Technical Specifications
+
+**Metrics Collection Framework**:
+```python
+from prometheus_client import Counter, Histogram, Gauge, CollectorRegistry
+import asyncio
+
+class PatriotMetricsCollector:
+    """
+    Business and technical metrics collection for PATRIOT trading system
+    """
+    
+    def __init__(self):
+        self.registry = CollectorRegistry()
+        self._setup_business_metrics()
+        self._setup_technical_metrics()
+    
+    def _setup_business_metrics(self):
+        """Define business-specific metrics"""
+        # Order metrics
+        self.orders_total = Counter(
+            'orders_total',
+            'Total number of orders processed',
+            ['user_id', 'symbol', 'side', 'status', 'exchange'],
+            registry=self.registry
+        )
+        
+        self.order_processing_duration = Histogram(
+            'order_processing_duration_seconds',
+            'Time taken to process orders',
+            ['exchange', 'order_type'],
+            registry=self.registry,
+            buckets=[0.1, 0.5, 1.0, 2.0, 5.0, 10.0]
+        )
+        
+        # Portfolio metrics
+        self.portfolio_value_usd = Gauge(
+            'portfolio_value_usd_total',
+            'Total portfolio value in USD',
+            ['user_id', 'exchange'],
+            registry=self.registry
+        )
+        
+        self.unrealized_pnl_usd = Gauge(
+            'unrealized_pnl_usd',
+            'Unrealized P&L in USD',
+            ['user_id', 'symbol'],
+            registry=self.registry
+        )
+        
+        # Risk metrics
+        self.risk_limit_violations = Counter(
+            'risk_limit_violations_total',
+            'Number of risk limit violations',
+            ['user_id', 'violation_type'],
+            registry=self.registry
+        )
+        
+        # Strategy metrics
+        self.strategy_performance = Gauge(
+            'strategy_performance_percent',
+            'Strategy performance percentage',
+            ['strategy_id', 'timeframe'],
+            registry=self.registry
+        )
+    
+    def _setup_technical_metrics(self):
+        """Define technical system metrics"""
+        # HTTP request metrics
+        self.http_requests_total = Counter(
+            'http_requests_total',
+            'Total HTTP requests',
+            ['service', 'endpoint', 'method', 'status_code'],
+            registry=self.registry
+        )
+        
+        self.http_request_duration = Histogram(
+            'http_request_duration_seconds',
+            'HTTP request duration',
+            ['service', 'endpoint'],
+            registry=self.registry
+        )
+        
+        # Database metrics
+        self.database_queries_total = Counter(
+            'database_queries_total',
+            'Total database queries',
+            ['service', 'operation', 'table'],
+            registry=self.registry
+        )
+        
+        self.database_query_duration = Histogram(
+            'database_query_duration_seconds',
+            'Database query duration',
+            ['service', 'operation'],
+            registry=self.registry
+        )
+        
+        # Kafka metrics
+        self.kafka_messages_produced = Counter(
+            'kafka_messages_produced_total',
+            'Total Kafka messages produced',
+            ['service', 'topic'],
+            registry=self.registry
+        )
+        
+        self.kafka_messages_consumed = Counter(
+            'kafka_messages_consumed_total',
+            'Total Kafka messages consumed',
+            ['service', 'topic'],
+            registry=self.registry
+        )
+    
+    # Business metric recording methods
+    async def record_order_created(
+        self, 
+        user_id: str, 
+        symbol: str, 
+        side: str,
+        exchange: str,
+        correlation_id: str
+    ):
+        """Record order creation metrics"""
+        self.orders_total.labels(
+            user_id=user_id,
+            symbol=symbol, 
+            side=side,
+            status='created',
+            exchange=exchange
+        ).inc()
+        
+        # Also log for correlation
+        logger.info("Order created metric recorded",
+                   correlation_id=correlation_id,
+                   user_id=user_id,
+                   symbol=symbol)
+    
+    async def record_portfolio_update(
+        self,
+        user_id: str,
+        exchange: str, 
+        total_value_usd: float,
+        correlation_id: str
+    ):
+        """Record portfolio value updates"""
+        self.portfolio_value_usd.labels(
+            user_id=user_id,
+            exchange=exchange
+        ).set(total_value_usd)
+        
+        logger.info("Portfolio value updated",
+                   correlation_id=correlation_id,
+                   user_id=user_id,
+                   total_value_usd=total_value_usd)
+    
+    async def record_risk_violation(
+        self,
+        user_id: str,
+        violation_type: str,
+        correlation_id: str
+    ):
+        """Record risk limit violations"""
+        self.risk_limit_violations.labels(
+            user_id=user_id,
+            violation_type=violation_type
+        ).inc()
+        
+        logger.error("Risk violation detected",
+                    correlation_id=correlation_id,
+                    user_id=user_id,
+                    violation_type=violation_type)
+```
+
+**Prometheus Configuration**:
+```yaml
+# prometheus.yml
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - "patriot_alerts.yml"
+
+scrape_configs:
+  - job_name: 'patriot-services'
+    static_configs:
+      - targets: ['user-command-service:8001']
+        labels:
+          service: 'user-command'
+      - targets: ['order-command-service:8002'] 
+        labels:
+          service: 'order-command'
+      - targets: ['portfolio-query-service:8003']
+        labels:
+          service: 'portfolio-query'
+    
+    scrape_interval: 5s
+    metrics_path: /metrics
+    
+  - job_name: 'patriot-infrastructure'
+    static_configs:
+      - targets: ['kong:8001']
+        labels:
+          component: 'api-gateway'
+      - targets: ['kafka-exporter:9308']
+        labels:
+          component: 'kafka'
+      - targets: ['postgres-exporter:9187']
+        labels:
+          component: 'database'
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          - alertmanager:9093
+```
+
+### Component 12: Health Check & Service Discovery
+
+#### Purpose & Scope
+Monitors service health and provides service discovery capabilities for dynamic scaling.
+
+#### Core Responsibilities
+- **Health Monitoring**: Check service availability and performance
+- **Service Registration**: Automatic service registration and deregistration  
+- **Load Balancer Integration**: Update load balancer configurations
+- **Failure Detection**: Detect and respond to service failures
+
+#### Technical Specifications
+
+**Health Check Framework**:
+```python
+from enum import Enum
+from dataclasses import dataclass
+from typing import Dict, List
+import aiohttp
+import asyncio
+
+class HealthStatus(Enum):
+    HEALTHY = "healthy"
+    DEGRADED = "degraded" 
+    UNHEALTHY = "unhealthy"
+    UNKNOWN = "unknown"
+
+@dataclass
+class HealthCheckResult:
+    service_name: str
+    status: HealthStatus
+    response_time_ms: float
+    details: Dict[str, any]
+    correlation_id: str
+    timestamp: str
+
+class HealthCheckService:
+    """
+    Comprehensive health checking for all PATRIOT services
+    """
+    
+    def __init__(self):
+        self.services = self._load_service_registry()
+        self.health_history = {}
+        self.alert_thresholds = self._load_alert_thresholds()
+    
+    def _load_service_registry(self) -> Dict[str, Dict]:
+        """Load service registry configuration"""
+        return {
+            'user-command-service': {
+                'url': 'http://user-command-service:8001',
+                'health_endpoint': '/health',
+                'critical': True,
+                'timeout_ms': 5000
+            },
+            'order-command-service': {
+                'url': 'http://order-command-service:8002', 
+                'health_endpoint': '/health',
+                'critical': True,
+                'timeout_ms': 3000
+            },
+            'portfolio-query-service': {
+                'url': 'http://portfolio-query-service:8003',
+                'health_endpoint': '/health', 
+                'critical': False,
+                'timeout_ms': 5000
+            },
+            'trading-engine': {
+                'url': 'http://trading-engine:8004',
+                'health_endpoint': '/health',
+                'critical': True,
+                'timeout_ms': 2000
+            }
+        }
+    
+    async def check_service_health(
+        self, 
+        service_name: str,
+        correlation_id: str
+    ) -> HealthCheckResult:
+        """Perform comprehensive health check on a service"""
+        service_config = self.services.get(service_name)
+        if not service_config:
+            return HealthCheckResult(
+                service_name=service_name,
+                status=HealthStatus.UNKNOWN,
+                response_time_ms=0,
+                details={'error': 'Service not found in registry'},
+                correlation_id=correlation_id,
+                timestamp=datetime.utcnow().isoformat()
+            )
+        
+        start_time = time.time()
+        
+        try:
+            async with aiohttp.ClientSession(
+                timeout=aiohttp.ClientTimeout(
+                    total=service_config['timeout_ms'] / 1000
+                )
+            ) as session:
+                headers = {'X-Correlation-ID': correlation_id}
+                
+                async with session.get(
+                    f"{service_config['url']}{service_config['health_endpoint']}",
+                    headers=headers
+                ) as response:
+                    response_time_ms = (time.time() - start_time) * 1000
+                    health_data = await response.json()
+                    
+                    # Determine health status
+                    if response.status == 200:
+                        if response_time_ms > service_config.get('degraded_threshold_ms', 2000):
+                            status = HealthStatus.DEGRADED
+                        else:
+                            status = HealthStatus.HEALTHY
+                    else:
+                        status = HealthStatus.UNHEALTHY
+                    
+                    return HealthCheckResult(
+                        service_name=service_name,
+                        status=status,
+                        response_time_ms=response_time_ms,
+                        details=health_data,
+                        correlation_id=correlation_id,
+                        timestamp=datetime.utcnow().isoformat()
+                    )
+                    
+        except asyncio.TimeoutError:
+            return HealthCheckResult(
+                service_name=service_name,
+                status=HealthStatus.UNHEALTHY,
+                response_time_ms=(time.time() - start_time) * 1000,
+                details={'error': 'Health check timeout'},
+                correlation_id=correlation_id,
+                timestamp=datetime.utcnow().isoformat()
+            )
+        except Exception as e:
+            return HealthCheckResult(
+                service_name=service_name,
+                status=HealthStatus.UNHEALTHY,
+                response_time_ms=(time.time() - start_time) * 1000,
+                details={'error': str(e)},
+                correlation_id=correlation_id,
+                timestamp=datetime.utcnow().isoformat()
+            )
+    
+    async def check_all_services(self, correlation_id: str) -> List[HealthCheckResult]:
+        """Check health of all registered services"""
+        tasks = [
+            self.check_service_health(service_name, correlation_id)
+            for service_name in self.services.keys()
+        ]
+        
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        # Log overall system health
+        healthy_count = sum(1 for r in results if r.status == HealthStatus.HEALTHY)
+        total_count = len(results)
+        
+        logger.info("System health check completed",
+                   correlation_id=correlation_id,
+                   healthy_services=healthy_count,
+                   total_services=total_count,
+                   health_percentage=round(healthy_count/total_count*100, 2))
+        
+        return results
+```
+
+**Service Discovery Integration**:
+```python
+class ServiceDiscovery:
+    """
+    Service discovery and registration for dynamic scaling
+    """
+    
+    def __init__(self):
+        self.consul_client = self._setup_consul_client()
+        self.registered_services = set()
+    
+    async def register_service(
+        self,
+        service_name: str,
+        service_id: str,
+        address: str,
+        port: int,
+        health_check_url: str,
+        correlation_id: str
+    ):
+        """Register service with discovery system"""
+        service_definition = {
+            'ID': service_id,
+            'Name': service_name,
+            'Tags': ['patriot', 'trading', 'microservice'],
+            'Address': address,
+            'Port': port,
+            'Meta': {
+                'correlation_id': correlation_id,
+                'registered_at': datetime.utcnow().isoformat(),
+                'version': '2.0'
+            },
+            'Check': {
+                'HTTP': health_check_url,
+                'Interval': '10s',
+                'Timeout': '5s',
+                'DeregisterCriticalServiceAfter': '30s'
+            }
+        }
+        
+        try:
+            await self.consul_client.agent.service.register(service_definition)
+            self.registered_services.add(service_id)
+            
+            logger.info("Service registered successfully",
+                       correlation_id=correlation_id,
+                       service_name=service_name,
+                       service_id=service_id,
+                       address=f"{address}:{port}")
+            
+        except Exception as e:
+            logger.error("Service registration failed",
+                        correlation_id=correlation_id,
+                        service_name=service_name,
+                        error=str(e))
+            raise
+    
+    async def discover_services(
+        self,
+        service_name: str,
+        correlation_id: str
+    ) -> List[Dict]:
+        """Discover available instances of a service"""
+        try:
+            health_services = await self.consul_client.health.service(
+                service_name,
+                passing=True
+            )
+            
+            instances = []
+            for service_info in health_services[1]:
+                service = service_info['Service']
+                instances.append({
+                    'id': service['ID'],
+                    'address': service['Address'],
+                    'port': service['Port'],
+                    'tags': service['Tags'],
+                    'meta': service['Meta']
+                })
+            
+            logger.info("Service discovery completed",
+                       correlation_id=correlation_id,
+                       service_name=service_name,
+                       instances_found=len(instances))
+            
+            return instances
+            
+        except Exception as e:
+            logger.error("Service discovery failed",
+                        correlation_id=correlation_id,
+                        service_name=service_name,
+                        error=str(e))
+            return []
+```
 
 ---
 
