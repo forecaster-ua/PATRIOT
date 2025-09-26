@@ -52,7 +52,8 @@ This documentation follows a progressive disclosure approach, allowing readers t
 | **[ANNEX-B-DATABASE-DESIGN](annexes/ANNEX-B-DATABASE-DESIGN.md)** | ERD, table structures, relationships | Database Design | 2.0 | DRAFT | 2,533 |
 | **[ANNEX-C-DEPLOYMENT-EXAMPLES](annexes/ANNEX-C-DEPLOYMENT-EXAMPLES.md)** | Docker Compose, configuration examples | DevOps | 2.0 | DRAFT | 2,872 |
 | **[ANNEX-D-USE-CASES](annexes/ANNEX-D-USE-CASES.md)** | Use case diagrams, user scenarios | Business Analysis | 2.0 | DRAFT | 681 |
-| **[ANNEX-E-API-DOCUMENTATION](annexes/ANNEX-E-API-DOCUMENTATION.md)** | REST API specifications, WebSocket streams | API Integration | 2.0 | DRAFT | 4,592 |
+| **[ANNEX-E-API-OVERVIEW](annexes/ANNEX-E-API-OVERVIEW.md)** | API architecture overview and navigation | API Integration | 2.0 | DRAFT | 290 |
+| **[Service APIs](annexes/api/)** | Individual microservice API specifications | Implementation | 2.0 | DRAFT | ~3,000 |
 
 ---
 
