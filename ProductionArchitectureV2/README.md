@@ -37,7 +37,7 @@ This documentation follows a progressive disclosure approach, allowing readers t
 
 | Document                                                         | Purpose | Target Audience | Version | Status | Lines |
 |------------------------------------------------------------------|---------|-----------------|---------|--------|-------|
-| **[01-SYSTEM-REQUIREMENTS](01-SYSTEM-REQUIREMENTS.md)**          | Functional & non-functional requirements | All stakeholders | 2.0 | DRAFT | 363   |
+| **[01-SYSTEM-REQUIREMENTS](01-SYSTEM-REQUIREMENTS.md)**          | Functional & non-functional requirements | All stakeholders | 2.1 | ON REVIEW | 390   |
 | **[02-SYSTEM-ARCHITECTURE](02-SYSTEM-ARCHITECTURE.md)**          | High-level architecture & design decisions | Architects, Senior Developers | 2.0 | DRAFT | 1346  |
 | **[03-COMPONENT-SPECIFICATIONS](03-COMPONENT-SPECIFICATIONS.md)** | Detailed service specifications | Development Team | 2.0 | DRAFT | 2,366 |
 | **[04-INFRASTRUCTURE](04-INFRASTRUCTURE.md)**                    | DevOps, deployment, monitoring | DevOps, System Administrators | 2.0 | DRAFT | 1,643 |
