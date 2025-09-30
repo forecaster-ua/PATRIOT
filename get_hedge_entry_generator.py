@@ -494,7 +494,7 @@ class MultiSignalAnalyzer:
 
 def test_multiple_tickers():
     """Тестирует анализ для нескольких тикеров с групповой отправкой в Telegram"""
-    test_tickers = ["BTCUSDT", "ETHUSDT", "AVAXUSDT", "BNBUSDT"]
+    test_tickers = ["BTCUSDT", "AVAXUSDT", "TONUSDT"]
     results = []  # Собираем результаты анализа
     
     print(f"🔍 Анализ {len(test_tickers)} тикеров: {', '.join(test_tickers)}")

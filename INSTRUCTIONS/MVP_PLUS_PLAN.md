@@ -106,8 +106,8 @@ class OrderManager:
 🏛️ NEW ARCHITECTURE
 ├── 📊 TradingEngine (главный координатор)
 ├── 📈 SignalProcessor (анализ сигналов)
-├── 🎯 OrderExecutor (исполнение ордеров)
-├── 👁️ PositionMonitor (websocket мониторинг)
+├── 🎯 OrderGenerator (REST генерация и исполнение ордеров)
+├── 👁️ PositionMonitor_WatchDog (websocket мониторинг, независимый модуль управления ордерами)
 ├── 🛡️ RiskManager (управление рисками)
 ├── 💾 DataRepository (хранение данных)
 └── 📱 NotificationService (уведомления)

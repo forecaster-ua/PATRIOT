@@ -7,7 +7,7 @@ from typing import Dict, List, Set, Optional
 class SignalProcessor:
     def __init__(self, ticker: str):
         self.ticker = ticker
-        self.timeframes = ["15m", "1h", "4h"]
+        self.timeframes = ["15m", "1h", "4h", "1d"] #1d added
         self.price_threshold = 0.005  # 0.05%
 
     def get_signals(self) -> Dict[str, Optional[Dict]]:
