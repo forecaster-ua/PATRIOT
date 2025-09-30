@@ -3,6 +3,13 @@ from statistics import mean
 from typing import Dict, List, Set, Optional, Tuple
 import json
 from collections import Counter
+import os
+from datetime import datetime
+from pathlib import Path
+
+# Глобальный список тестовых тикеров для использования в разных функциях
+test_tickers = ["BTCUSDT", "AVAXUSDT", "TONUSDT", "CRVUSDT", "ETHUSDT"]
+
 
 # Импортируем telegram_bot для отправки уведомлений
 try:
@@ -13,6 +20,7 @@ except ImportError:
     TELEGRAM_AVAILABLE = False
     telegram_bot = None
 
+# Формируем api_client для получения сигналов
 class MultiSignalAnalyzer:
     def __init__(self, ticker: str):
         self.ticker = ticker
@@ -70,7 +78,7 @@ class MultiSignalAnalyzer:
         return f"{confidence}%"
 
     def format_telegram_message(self, parsed_signals: Dict, dominant_direction: str, corrections: List[Dict], opposite_mains: List[Dict], response_time: float) -> str:
-        """Форматирует данные для отправки в Telegram (дублирует формат терминала)"""
+        """Форматирует данные для отправки в Telegram"""
         # Генерируем тот же формат, что и в терминале
         message = f"📊 Анализ: {self.ticker}\n"
         message += "--------------------------------------------------\n"
@@ -83,7 +91,7 @@ class MultiSignalAnalyzer:
         message += f"🎯 Доминирующее направление: {dominant_direction}\n\n"
         
         # Простые сигналы
-        message += f"📈 ПРОСТЫЕ СИГНАЛЫ:\n"
+        message += f"📈 <b>ПРОСТЫЕ СИГНАЛЫ:</b>\n"
         for signal in parsed_signals['simple']:
             message += f"   {signal['timeframe']}: {signal['signal']} @ {signal['entry_price']} "
             message += f"(TP: {signal['take_profit']}, SL: {signal['stop_loss']}, "
@@ -91,7 +99,7 @@ class MultiSignalAnalyzer:
         message += "\n"
         
         # Сложные сигналы
-        message += f"🔄 СЛОЖНЫЕ СИГНАЛЫ:\n"
+        message += f"<b>🔄 СЛОЖНЫЕ СИГНАЛЫ:</b>\n"
         for signal in parsed_signals['complex']:
             main = signal['main_signal']
             corr = signal['correction_signal']
@@ -104,7 +112,7 @@ class MultiSignalAnalyzer:
         
         # Важные противотрендовые main сигналы
         if opposite_mains:
-            message += f"🚨 ВАЖНЫЕ ПРОТИВОТРЕНДОВЫЕ MAIN СИГНАЛЫ ({len(opposite_mains)} найдено):\n"
+            message += f"<b>🚨 ВАЖНЫЕ ПРОТИВОТРЕНДОВЫЕ MAIN СИГНАЛЫ ({len(opposite_mains)} найдено):</b>\n"
             for signal in opposite_mains:
                 message += f"   {signal['timeframe']}: {signal['direction']} @ {signal['entry_price']} "
                 message += f"{self.format_confidence(signal['confidence'])} - Сильный уровень против доминирующего {dominant_direction}\n"
@@ -112,7 +120,7 @@ class MultiSignalAnalyzer:
         
         # Коррекционные сделки
         if corrections:
-            message += f"⚠️  КОРРЕКЦИОННЫЕ СДЕЛКИ ({len(corrections)} найдено):\n\n"
+            message += f"⚠️  <b>КОРРЕКЦИОННЫЕ СДЕЛКИ</b> ({len(corrections)} найдено):\n\n"
             
             for i, correction in enumerate(corrections, 1):
                 message += f"   📍 Коррекция #{i} ({correction['timeframe']}, {correction['type']}):\n"
@@ -128,7 +136,7 @@ class MultiSignalAnalyzer:
                 potentials = self.calculate_potentials_to_levels(correction, parsed_signals, dominant_direction)
                 
                 if potentials:
-                    message += f"      \n      🎯 ПОТЕНЦИАЛЫ К УРОВНЯМ КРУПНЫХ ТФ:\n"
+                    message += f"      \n      <b>🎯 ПОТЕНЦИАЛЫ К УРОВНЯМ КРУПНЫХ ТФ:</b>\n"
                     for j, pot in enumerate(potentials[:5], 1):  # Показываем топ-5
                         message += f"         {j}. {pot['timeframe']} ({pot['level_type']}): "
                         message += f"{pot['level_value']} = {pot['potential_percent']}% "
@@ -141,7 +149,7 @@ class MultiSignalAnalyzer:
             message += f"   Все сигналы соответствуют доминирующему направлению: {dominant_direction}\n\n"
         
         # Основные сигналы по доминирующему направлению
-        message += f"🚀 ОСНОВНЫЕ СИГНАЛЫ ПО ДОМИНИРУЮЩЕМУ НАПРАВЛЕНИЮ ({dominant_direction}):\n"
+        message += f"🚀 <b>ОСНОВНЫЕ СИГНАЛЫ ПО ДОМИНИРУЮЩЕМУ НАПРАВЛЕНИЮ</b> ({dominant_direction}):\n"
         
         # Из простых сигналов
         for signal in parsed_signals['simple']:
@@ -192,6 +200,54 @@ class MultiSignalAnalyzer:
             return True
         except Exception as e:
             print(f"❌ Ошибка при отправке в Telegram: {e}")
+            return False
+
+    def save_to_file(self, parsed_signals: Dict, dominant_direction: str, corrections: List[Dict], opposite_mains: List[Dict], response_time: float) -> bool:
+        """Сохраняет результат анализа в текстовый файл"""
+        try:
+            # Создаем папку HISTORY если не существует
+            history_dir = Path("HISTORY")
+            history_dir.mkdir(exist_ok=True)
+            
+            # Генерируем имя файла
+            now = datetime.now()
+            timestamp = now.strftime("%H%M%S")
+            datestamp = now.strftime("%Y%m%d")
+            timeframes_str = "-".join(self.timeframes)
+            
+            filename = f"{self.ticker}_{timeframes_str}_{timestamp}_{datestamp}.txt"
+            filepath = history_dir / filename
+            
+            # Получаем тот же контент что и для Telegram, но без HTML разметки
+            content = self.format_telegram_message(parsed_signals, dominant_direction, corrections, opposite_mains, response_time)
+            
+            # Удаляем HTML теги для чистого текста
+            clean_content = content.replace('<b>', '').replace('</b>', '')
+            
+            # Добавляем заголовок с метаинформацией
+            file_content = f"""# Анализ криптовалютных сигналов
+# Тикер: {self.ticker}
+# Таймфреймы: {', '.join(self.timeframes)}
+# Дата: {now.strftime('%Y-%m-%d %H:%M:%S')}
+# Время ответа API: {response_time}с
+{"="*60}
+
+{clean_content}
+
+{"="*60}
+# Файл сгенерирован автоматически hedge analyzer
+# Время создания: {now.strftime('%Y-%m-%d %H:%M:%S')}
+"""
+            
+            # Записываем в файл
+            with open(filepath, 'w', encoding='utf-8') as f:
+                f.write(file_content)
+            
+            print(f"💾 Результат сохранен в файл: {filename}")
+            return True
+            
+        except Exception as e:
+            print(f"❌ Ошибка при сохранении в файл: {e}")
             return False
 
     def parse_signals(self, data: List[Dict]) -> Dict:
@@ -390,8 +446,8 @@ class MultiSignalAnalyzer:
         
         # Парсим сигналы
         parsed_signals = self.parse_signals(raw_data)
-        
-        print(f"📊 Анализ: {self.ticker}")
+
+        print(f"📊 <b>Анализ: {self.ticker}</b>")
         print("--------------------------------------------------")
         print(f"⏱️ Время ответа API: {response_time}с")
         print(f"📊 Структура сигналов для {self.ticker}:")
@@ -403,13 +459,13 @@ class MultiSignalAnalyzer:
         print(f"\n🎯 Доминирующее направление: {dominant_direction}")
         
         # Выводим все сигналы по категориям
-        print(f"\n📈 ПРОСТЫЕ СИГНАЛЫ:")
+        print(f"\n📈 <b>ПРОСТЫЕ СИГНАЛЫ:</b>")
         for signal in parsed_signals['simple']:
             print(f"   {signal['timeframe']}: {signal['signal']} @ {signal['entry_price']} "
                   f"(TP: {signal['take_profit']}, SL: {signal['stop_loss']}, "
                   f"Conf: {self.format_confidence(signal['confidence'])})")
         
-        print(f"\n🔄 СЛОЖНЫЕ СИГНАЛЫ:")
+        print(f"\n🔄 <b>СЛОЖНЫЕ СИГНАЛЫ:</b>")
         for signal in parsed_signals['complex']:
             main = signal['main_signal']
             corr = signal['correction_signal']
@@ -424,7 +480,7 @@ class MultiSignalAnalyzer:
         
         # Показываем противотрендовые main сигналы
         if opposite_mains:
-            print(f"\n🚨 ВАЖНЫЕ ПРОТИВОТРЕНДОВЫЕ MAIN СИГНАЛЫ ({len(opposite_mains)} найдено):")
+            print(f"\n🚨 <b>ВАЖНЫЕ ПРОТИВОТРЕНДОВЫЕ MAIN СИГНАЛЫ</b> ({len(opposite_mains)} найдено):")
             for signal in opposite_mains:
                 print(f"   {signal['timeframe']}: {signal['direction']} @ {signal['entry_price']} "
                       f"{self.format_confidence(signal['confidence'])} - Сильный уровень против доминирующего {dominant_direction}")
@@ -433,7 +489,7 @@ class MultiSignalAnalyzer:
         corrections = self.find_correction_trades(parsed_signals, dominant_direction)
         
         if corrections:
-            print(f"\n⚠️  КОРРЕКЦИОННЫЕ СДЕЛКИ ({len(corrections)} найдено):")
+            print(f"\n⚠️  <b>КОРРЕКЦИОННЫЕ СДЕЛКИ</b> ({len(corrections)} найдено):")
             
             for i, correction in enumerate(corrections, 1):
                 print(f"\n   📍 Коррекция #{i} ({correction['timeframe']}, {correction['type']}):")
@@ -449,7 +505,7 @@ class MultiSignalAnalyzer:
                 potentials = self.calculate_potentials_to_levels(correction, parsed_signals, dominant_direction)
                 
                 if potentials:
-                    print(f"      \n      🎯 ПОТЕНЦИАЛЫ К УРОВНЯМ КРУПНЫХ ТФ:")
+                    print(f"      \n      🎯 <b>ПОТЕНЦИАЛЫ К УРОВНЯМ КРУПНЫХ ТФ:</b>")
                     for j, pot in enumerate(potentials[:5], 1):  # Показываем топ-5
                         print(f"         {j}. {pot['timeframe']} ({pot['level_type']}): "
                               f"{pot['level_value']} = {pot['potential_percent']}% "
@@ -477,6 +533,9 @@ class MultiSignalAnalyzer:
                 print(f"   {signal['timeframe']} (main): {main['type']} @ {main['entry']} "
                       f"(Conf: {self.format_confidence(main['confidence'])})")
         
+        # Сохраняем результат в файл (всегда)
+        self.save_to_file(parsed_signals, dominant_direction, corrections, opposite_mains, response_time)
+        
         # Предлагаем отправить в Telegram (только если ask_telegram=True)
         if ask_telegram:
             if self.ask_user_confirmation():
@@ -492,9 +551,9 @@ class MultiSignalAnalyzer:
             'response_time': response_time
         }
 
+
 def test_multiple_tickers():
     """Тестирует анализ для нескольких тикеров с групповой отправкой в Telegram"""
-    test_tickers = ["BTCUSDT", "AVAXUSDT", "TONUSDT"]
     results = []  # Собираем результаты анализа
     
     print(f"🔍 Анализ {len(test_tickers)} тикеров: {', '.join(test_tickers)}")
@@ -571,6 +630,15 @@ def send_multiple_to_telegram(results: List[Dict]) -> None:
         analyzer = result['analyzer']
         
         try:
+            # Сохраняем в файл для каждого тикера
+            analyzer.save_to_file(
+                result['parsed_signals'], 
+                result['dominant_direction'], 
+                result['corrections'],
+                result['opposite_mains'],
+                result['response_time']
+            )
+            
             # Форматируем сообщение с реальным временем ответа
             message = analyzer.format_telegram_message(
                 result['parsed_signals'], 
@@ -582,20 +650,20 @@ def send_multiple_to_telegram(results: List[Dict]) -> None:
             
             # Отправляем
             telegram_bot.send_message(message)
-            print(f"   ✅ {i}/{len(results)} - {ticker} отправлен")
+            print(f"   ✅ {i}/{len(results)} - {ticker} отправлен и сохранен")
             success_count += 1
             
         except Exception as e:
             print(f"   ❌ {i}/{len(results)} - Ошибка отправки {ticker}: {e}")
     
-    print(f"\n🎉 Отправка завершена: {success_count}/{len(results)} сообщений успешно отправлено")
+    print(f"\n🎉 Отправка завершена: {success_count}/{len(results)} сообщений успешно отправлено и сохранено в HISTORY/")
 
 def interactive_mode():
     """Интерактивный режим выбора тикера и отправки"""
     print("🔍 MultiSignal Analyzer")
     print("="*40)
     print("1. Анализ одного тикера")
-    print("2. Анализ всех тестовых тикеров (BTCUSDT, ETHUSDT, AVAXUSDT)")
+    print(f"2. Анализ всех тестовых тикеров {test_tickers}")
     print("3. Выход")
     
     while True:
