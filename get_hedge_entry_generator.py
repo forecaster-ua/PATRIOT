@@ -59,6 +59,12 @@ class MultiSignalAnalyzer:
             
             if response.status_code == 200:
                 data = response.json()
+                
+                # Проверяем что данные в ожидаемом формате
+                if not isinstance(data, list):
+                    print(f"❌ API вернул неожиданный тип данных: {type(data)}")
+                    return None, response_time
+                
                 return data, response_time
             else:
                 print(f"❌ Ошибка API: {response.status_code}")
@@ -255,7 +261,17 @@ class MultiSignalAnalyzer:
         simple_signals = []  # Сигналы без main/correction
         complex_signals = []  # Сигналы с main/correction
         
-        for signal_data in data:
+        # Проверяем что data это список
+        if not isinstance(data, list):
+            print(f"⚠️ Ожидался список, получен {type(data)}: {data}")
+            return {'simple': simple_signals, 'complex': complex_signals}
+        
+        for i, signal_data in enumerate(data):
+            # Проверяем что элемент это словарь
+            if not isinstance(signal_data, dict):
+                print(f"⚠️ Элемент {i} не является словарем: {type(signal_data)} = {signal_data}")
+                continue
+                
             timeframe = signal_data.get('timeframe')
             
             # Проверяем тип сигнала
