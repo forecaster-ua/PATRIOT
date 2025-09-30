@@ -22,14 +22,26 @@ import signal
 import logging
 
 # Настройка логирования
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('hedge_scheduler.log'),
-        logging.StreamHandler()
-    ]
-)
+def setup_logging():
+    """Настраивает логирование в зависимости от режима запуска"""
+    handlers = []
+    
+    # Всегда логируем в файл
+    handlers.append(logging.FileHandler('hedge_scheduler.log'))
+    
+    # Добавляем StreamHandler только если не запущены через nohup/service
+    # (проверяем, есть ли TTY - терминал)
+    if sys.stdout.isatty():
+        handlers.append(logging.StreamHandler())
+    
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        handlers=handlers
+    )
+
+# Инициализируем логирование
+setup_logging()
 
 class HedgeScheduler:
     def __init__(self, interval_minutes=15, timezone='Europe/Kyiv'):

@@ -24,7 +24,8 @@ case "$1" in
         echo "📄 Лог файл: $LOG_FILE"
         
         # Запускаем в фоне с интервалом 15 минут
-        nohup python3 "$HEDGE_SCRIPT" 15 >> "$LOG_FILE" 2>&1 &
+        # Логирование управляется внутри Python скрипта
+        nohup python3 "$HEDGE_SCRIPT" 15 >/dev/null 2>&1 &
         PID=$!
         echo "$PID" > "$PID_FILE"
         
