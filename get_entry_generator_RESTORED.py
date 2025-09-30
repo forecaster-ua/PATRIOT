@@ -23,26 +23,31 @@ class MultiSignalAnalyzer:
         """Получаем мульти-сигналы для всех таймфреймов одним запросом"""
         import time
         
-        # Формируем URL с множественными параметрами timeframes
-        url_parts = [f"{self.api_url}?pair={self.ticker}"]
-        
-        # Добавляем все таймфреймы как отдельные параметры
-        for tf in self.timeframes:
-            url_parts.append(f"timeframes={tf}")
-        
-        # Добавляем служебные параметры в конце
-        url_parts.extend([
-            "lang=uk",
-            "model_type=xgb"
-        ])
-        
-        full_url = "&".join(url_parts)
-        
+        # Инициализируем время для безопасности
         start_time = time.time()
+        response_time = 0.0
+        
         try:
+            # Формируем URL с множественными параметрами timeframes
+            url_parts = [f"{self.api_url}?pair={self.ticker}"]
+            
+            # Добавляем все таймфреймы как отдельные параметры
+            for tf in self.timeframes:
+                url_parts.append(f"timeframes={tf}")
+            
+            # Добавляем служебные параметры в конце
+            url_parts.extend([
+                "lang=uk",
+                "model_type=xgb"
+            ])
+            
+            full_url = "&".join(url_parts)
+            
+            # Засекаем время перед запросом
+            request_start = time.time()
             response = requests.get(full_url, timeout=30)
-            end_time = time.time()
-            response_time = round(end_time - start_time, 2)
+            request_end = time.time()
+            response_time = round(request_end - request_start, 2)
             
             if response.status_code == 200:
                 data = response.json()
@@ -52,8 +57,9 @@ class MultiSignalAnalyzer:
                 return None, response_time
                 
         except Exception as e:
-            end_time = time.time()
-            response_time = round(end_time - start_time, 2)
+            # Безопасно вычисляем время даже при исключении
+            error_time = time.time()
+            response_time = round(error_time - start_time, 2)
             print(f"❌ Ошибка при запросе к API: {e}")
             return None, response_time
 
@@ -482,7 +488,8 @@ class MultiSignalAnalyzer:
             'parsed_signals': parsed_signals,
             'dominant_direction': dominant_direction,
             'corrections': corrections,
-            'opposite_mains': opposite_mains
+            'opposite_mains': opposite_mains,
+            'response_time': response_time
         }
 
 def test_multiple_tickers():
@@ -520,7 +527,8 @@ def test_multiple_tickers():
             'parsed_signals': result['parsed_signals'],
             'dominant_direction': result['dominant_direction'],
             'corrections': result['corrections'],
-            'opposite_mains': result['opposite_mains']
+            'opposite_mains': result['opposite_mains'],
+            'response_time': result.get('response_time', 0.0)  # Сохраняем реальное время
         })
     
     print(f"\n{'='*80}")
@@ -563,13 +571,13 @@ def send_multiple_to_telegram(results: List[Dict]) -> None:
         analyzer = result['analyzer']
         
         try:
-            # Форматируем сообщение (нужно добавить response_time, используем 0.0 как заглушку)
+            # Форматируем сообщение с реальным временем ответа
             message = analyzer.format_telegram_message(
                 result['parsed_signals'], 
                 result['dominant_direction'], 
                 result['corrections'],
                 result['opposite_mains'],
-                0.0  # response_time - заглушка для batch режима
+                result['response_time']  # Используем реальное время ответа
             )
             
             # Отправляем
