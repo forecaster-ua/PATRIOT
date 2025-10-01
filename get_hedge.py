@@ -139,8 +139,10 @@ class HedgeScheduler:
         try:
             logging.info("🔍 Запуск hedge analyzer...")
             
-            # Подготавливаем команду
-            cmd = [sys.executable, str(self.script_path)]
+            # Подготавливаем команду с флагом batch
+            # Используем python3 явно для совместимости
+            python_exe = "python3" if sys.executable.endswith("python") else sys.executable
+            cmd = [python_exe, str(self.script_path), "--batch"]
             
             # Запускаем процесс с автоматическими ответами
             process = subprocess.Popen(

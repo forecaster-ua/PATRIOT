@@ -209,20 +209,18 @@ class MultiSignalAnalyzer:
             return False
 
     def save_to_file(self, parsed_signals: Dict, dominant_direction: str, corrections: List[Dict], opposite_mains: List[Dict], response_time: float) -> bool:
-        """Сохраняет результат анализа в текстовый файл"""
+        """Сохраняет результат анализа в локальный файл и опционально в Google Drive"""
         try:
-            # Создаем папку HISTORY если не существует
-            history_dir = Path("HISTORY")
-            history_dir.mkdir(exist_ok=True)
+            # Импортируем модули хранения
+            from storage import LocalStorage, DriveStorage
             
-            # Генерируем имя файла
+            # Генерируем имя файла (формат остается неизменным)
             now = datetime.now()
             timestamp = now.strftime("%H%M%S")
             datestamp = now.strftime("%Y%m%d")
             timeframes_str = "-".join(self.timeframes)
             
             filename = f"{self.ticker}_{timeframes_str}_{timestamp}_{datestamp}.txt"
-            filepath = history_dir / filename
             
             # Получаем тот же контент что и для Telegram, но без HTML разметки
             content = self.format_telegram_message(parsed_signals, dominant_direction, corrections, opposite_mains, response_time)
@@ -245,15 +243,64 @@ class MultiSignalAnalyzer:
 # Время создания: {now.strftime('%Y-%m-%d %H:%M:%S')}
 """
             
-            # Записываем в файл
-            with open(filepath, 'w', encoding='utf-8') as f:
-                f.write(file_content)
+            # 1) Локальное сохранение в новую структуру HEDGE.BOT.HISTORY/{TICKER}/
+            local = LocalStorage("HEDGE.BOT.HISTORY")
+            filepath = local.write_text(self.ticker, filename, file_content)
+            print(f"💾 Локально сохранен: {filepath}")
             
-            print(f"💾 Результат сохранен в файл: {filename}")
+            # Опциональное сжатие (можно включить для экономии места)
+            # self._compress_file(filepath)
+            
+            # 2) Опциональная загрузка в Google Drive (service account only)
+            import os
+            if os.getenv("GDRIVE_UPLOAD", "0") == "1":
+                drive = DriveStorage(enabled=True)
+                try:
+                    folder_id = drive.ensure_folder("HEDGE.BOT.HISTORY", self.ticker)
+                    if folder_id:
+                        file_id = drive.upload_file(filepath, folder_id)
+                        if file_id:
+                            print(f"☁️ Загружен в Google Drive, file_id={file_id}")
+                        else:
+                            print("⚠️ Google Drive загрузка пропущена (ошибка)")
+                    else:
+                        print("⚠️ Google Drive папка не создана (ошибка)")
+                except Exception as e:
+                    print(f"GDRIVE: upload skipped due to error → {e}")
+            
             return True
             
         except Exception as e:
             print(f"❌ Ошибка при сохранении в файл: {e}")
+            return False
+    
+    def _compress_file(self, filepath: Path) -> bool:
+        """Сжимает файл с помощью gzip и удаляет оригинал"""
+        try:
+            import gzip
+            
+            # Читаем содержимое
+            content = filepath.read_text(encoding='utf-8')
+            
+            # Сжимаем
+            compressed_path = filepath.with_suffix(filepath.suffix + '.gz')
+            with gzip.open(compressed_path, 'wt', encoding='utf-8') as f:
+                f.write(content)
+            
+            # Удаляем оригинал
+            filepath.unlink()
+            
+            original_size = len(content.encode('utf-8'))
+            compressed_size = compressed_path.stat().st_size
+            compression_ratio = original_size / compressed_size
+            
+            print(f"🗜️ Файл сжат: {filepath.name} -> {compressed_path.name}")
+            print(f"   Сжатие: {compression_ratio:.1f}x ({original_size}б -> {compressed_size}б)")
+            
+            return True
+            
+        except Exception as e:
+            print(f"❌ Ошибка при сжатии файла: {e}")
             return False
 
     def parse_signals(self, data: List[Dict]) -> Dict:
@@ -569,7 +616,7 @@ class MultiSignalAnalyzer:
 
 
 def test_multiple_tickers():
-    """Тестирует анализ для нескольких тикеров с групповой отправкой в Telegram"""
+    """Тестирует анализ для нескольких тикеров с групповой отправкой в Telegram (интерактивный режим)"""
     results = []  # Собираем результаты анализа
     
     print(f"🔍 Анализ {len(test_tickers)} тикеров: {', '.join(test_tickers)}")
@@ -615,6 +662,54 @@ def test_multiple_tickers():
         
     print(f"{'='*80}")
 
+def test_multiple_tickers_batch():
+    """Автоматический анализ для планировщика без пользовательского ввода"""
+    results = []  # Собираем результаты анализа
+    
+    print(f"🔍 Автоматический анализ {len(test_tickers)} тикеров: {', '.join(test_tickers)}")
+    print("="*80)
+    
+    # Анализируем все тикеры и собираем результаты
+    for ticker in test_tickers:
+        print(f"\n📊 Анализ: {ticker}")
+        print("-"*50)
+        
+        analyzer = MultiSignalAnalyzer(ticker)
+        
+        # Анализируем без отправки в Telegram (ask_telegram=False)
+        result = analyzer.process(ask_telegram=False)
+        
+        if not result:
+            print(f"❌ Не удалось проанализировать {ticker}")
+            continue
+        
+        # Показываем краткую информацию  
+        print(f"   🎯 Доминирующее направление: {result['dominant_direction']}")
+        print(f"   📈 Простых сигналов: {len(result['parsed_signals']['simple'])}")
+        print(f"   🔄 Сложных сигналов: {len(result['parsed_signals']['complex'])}")
+        print(f"   ⚠️ Коррекционных сделок: {len(result['corrections'])}")
+        
+        # Сохраняем результат для отправки
+        results.append({
+            'ticker': ticker,
+            'analyzer': analyzer,
+            'parsed_signals': result['parsed_signals'],
+            'dominant_direction': result['dominant_direction'],
+            'corrections': result['corrections'],
+            'opposite_mains': result['opposite_mains'],
+            'response_time': result.get('response_time', 0.0)
+        })
+    
+    print(f"\n{'='*80}")
+    print(f"✅ Анализ завершен для {len(results)} тикеров")
+    
+    # Автоматическая отправка в Telegram (без подтверждения)
+    if results:
+        print(f"📤 Автоматическая отправка в Telegram...")
+        send_multiple_to_telegram(results)
+        
+    print(f"{'='*80}")
+
 def ask_multiple_telegram_confirmation(results: List[Dict]) -> bool:
     """Запрашивает подтверждение для отправки результатов по всем тикерам"""
     if not TELEGRAM_AVAILABLE:
@@ -646,16 +741,8 @@ def send_multiple_to_telegram(results: List[Dict]) -> None:
         analyzer = result['analyzer']
         
         try:
-            # Сохраняем в файл для каждого тикера
-            analyzer.save_to_file(
-                result['parsed_signals'], 
-                result['dominant_direction'], 
-                result['corrections'],
-                result['opposite_mains'],
-                result['response_time']
-            )
-            
-            # Форматируем сообщение с реальным временем ответа
+            # Форматируем сообщение с реальным временем ответа  
+            # (файл уже сохранен в analyzer.process())
             message = analyzer.format_telegram_message(
                 result['parsed_signals'], 
                 result['dominant_direction'], 
@@ -666,13 +753,13 @@ def send_multiple_to_telegram(results: List[Dict]) -> None:
             
             # Отправляем
             telegram_bot.send_message(message)
-            print(f"   ✅ {i}/{len(results)} - {ticker} отправлен и сохранен")
+            print(f"   ✅ {i}/{len(results)} - {ticker} отправлен")
             success_count += 1
             
         except Exception as e:
             print(f"   ❌ {i}/{len(results)} - Ошибка отправки {ticker}: {e}")
     
-    print(f"\n🎉 Отправка завершена: {success_count}/{len(results)} сообщений успешно отправлено и сохранено в HISTORY/")
+    print(f"\n🎉 Отправка завершена: {success_count}/{len(results)} сообщений успешно отправлено")
 
 def interactive_mode():
     """Интерактивный режим выбора тикера и отправки"""
@@ -705,10 +792,11 @@ def interactive_mode():
 
 # Пример использования
 if __name__ == "__main__":
-    # Для быстрого тестирования - анализируем AVAXUSDT
-    # Раскомментируйте interactive_mode() для интерактивного режима
+    import sys
     
-    # analyzer = MultiSignalAnalyzer("AVAXUSDT")
-    # analyzer.process()
-    
-    interactive_mode()
+    # Если запущен планировщиком - используем автоматический режим без интерактивности
+    if len(sys.argv) > 1 and sys.argv[1] == "--batch":
+        test_multiple_tickers_batch()
+    else:
+        # Интерактивный режим для ручного запуска
+        interactive_mode()

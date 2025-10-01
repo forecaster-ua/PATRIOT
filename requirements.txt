@@ -19,6 +19,10 @@ schedule==1.2.0
 # Advanced retry mechanism with backoff
 tenacity==8.2.3
 
+# Google Drive API integration (optional - for cloud storage)
+google-api-python-client==2.103.0
+google-auth==2.23.3
+
 # Table formatting for console output
 tabulate==0.9.0
 
